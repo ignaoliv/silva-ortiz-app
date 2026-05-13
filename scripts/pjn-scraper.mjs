@@ -65,68 +65,113 @@ function parseDate(str) {
 }
 
 function esc(s, max = 499) {
-  return (s || '').replace(/'/g, "''").substring(0, max)
+  return (String(s || '')).replace(/'/g, "''").substring(0, max)
 }
 
-// ── Extraer actuaciones del innerText de la página de detalle ─────
-function extraerActuaciones(texto) {
-  const lineas    = texto.split('\n').map(l => l.trim()).filter(Boolean)
-  const resultado = []
-  let actual      = null
-
-  for (let i = 0; i < lineas.length; i++) {
-    const l = lineas[i]
-    if (l === 'Oficina:') {
-      if (actual) resultado.push(actual)
-      actual = { oficina: lineas[i+1] || '', fecha: null, tipo: '', detalle: '', fojas: '' }
-      i++
-    } else if (l === 'Fecha:' && actual) {
-      actual.fecha = parseDate(lineas[i+1] || '')
-      i++
-    } else if (l === 'Tipo actuacion:' && actual) {
-      actual.tipo = lineas[i+1] || ''
-      i++
-    } else if (l === 'Detalle:' && actual) {
-      actual.detalle = lineas[i+1] || ''
-      i++
-    } else if (actual && /^\d+ \/ \d+$/.test(l)) {
-      actual.fojas = l
-    }
-  }
-  if (actual) resultado.push(actual)
-  return resultado.filter(a => a.tipo && a.detalle)
-}
-
-// ── Scrape todas las actuaciones de un expediente (con paginación) ─
-async function scrapeActuaciones(page) {
-  const todas = []
-  let pagina  = 1
+// ── Extraer actuaciones del Libro Digital ─────────────────────────
+// Estructura: lista de items en panel izquierdo
+// Cada item: fecha (dd/mm/yyyy) | fojas (fs. X/X) | descripcion
+async function extraerActuacionesLibroDigital(page) {
+  const todas  = []
+  let   pagina = 1
 
   while (true) {
-    console.log(`      📄 Pág. ${pagina}...`)
+    console.log(`      📄 Página ${pagina}...`)
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
-    const texto = await page.evaluate(() => document.body.innerText)
-    const acts  = extraerActuaciones(texto)
-    todas.push(...acts)
-    console.log(`         ${acts.length} actuaciones encontradas`)
 
-    // Paginación: buscar link numérico siguiente
-    const siguiente = await page.evaluate((pag) => {
-      const links = [...document.querySelectorAll('a')]
-      const next  = links.find(a => a.textContent.trim() === String(pag + 1))
-      return next ? next.id || next.getAttribute('onclick') || '__click__' : null
+    // Extraer items del panel izquierdo
+    const items = await page.evaluate(() => {
+      const resultado = []
+
+      // Los items están en una lista, cada uno tiene fecha, tipo, descripción, fojas
+      // Selectores posibles según la estructura del libro digital del PJN
+      const selectors = [
+        '.lista-actuaciones li',
+        '.actuaciones-lista li',
+        '[class*="actuacion-item"]',
+        '.panel-left li',
+        'ul.list-group li',
+        '.list-group-item',
+      ]
+
+      let items = []
+      for (const sel of selectors) {
+        items = [...document.querySelectorAll(sel)]
+        if (items.length > 0) break
+      }
+
+      // Si no encontramos con selectores específicos, parsear el DOM del panel
+      if (items.length === 0) {
+        // Buscar el panel izquierdo por estructura
+        const panels = [...document.querySelectorAll('div, aside, section')]
+        for (const panel of panels) {
+          const links = panel.querySelectorAll('a')
+          if (links.length > 3) {
+            items = [...panel.querySelectorAll('li, [class*="item"], [class*="row"]')]
+            if (items.length > 0) break
+          }
+        }
+      }
+
+      for (const item of items) {
+        const texto = item.innerText || item.textContent || ''
+        const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean)
+        if (lineas.length === 0) continue
+
+        // Buscar fecha (dd/mm/yyyy)
+        const fechaMatch = texto.match(/\d{2}\/\d{2}\/\d{4}/)
+        const fecha      = fechaMatch ? fechaMatch[0] : null
+
+        // Buscar fojas (fs. X/X o X / X)
+        const fojasMatch = texto.match(/fs\.\s*(\d+\s*\/\s*\d+)/i) || texto.match(/(\d+\s*\/\s*\d+)/)
+        const fojas      = fojasMatch ? fojasMatch[1].trim() : ''
+
+        // La descripción es el texto sin fecha ni fojas
+        const desc = lineas
+          .filter(l => !l.match(/^\d{2}\/\d{2}\/\d{4}$/) && !l.match(/^fs\./i) && l.length > 1)
+          .join(' ')
+          .trim()
+
+        // Tipo: letra del círculo (E, D, C, O, etc.)
+        const circulo = item.querySelector('[class*="badge"], [class*="circle"], [class*="tipo"], span')
+        const tipo    = circulo?.textContent?.trim() || ''
+
+        if (fecha && desc) {
+          resultado.push({ fecha, tipo, descripcion: desc, fojas })
+        }
+      }
+
+      return resultado
+    })
+
+    console.log(`         ${items.length} actuaciones encontradas`)
+
+    if (items.length === 0 && pagina === 1) {
+      // Intentar extracción alternativa por innerText completo
+      const texto  = await page.evaluate(() => document.body.innerText)
+      console.log(`         Texto página (primeros 500 chars): ${texto.substring(0, 500)}`)
+    }
+
+    todas.push(...items)
+
+    // Paginación: buscar botón/link "Siguiente" o número de página siguiente
+    const hayNext = await page.evaluate((pag) => {
+      const links = [...document.querySelectorAll('a, button')]
+      return links.some(el => {
+        const t = el.textContent.trim()
+        return t === String(pag + 1) || t.toLowerCase().includes('siguiente') || t === '>'
+      })
     }, pagina)
 
-    if (!siguiente) break
+    if (!hayNext) break
 
-    // Hacer click en el link de siguiente página
-    const nextLink = await page.$(`a:text-is("${pagina + 1}")`)
-    if (!nextLink) break
-    await nextLink.click()
+    const nextEl = await page.$(`a:text-is("${pagina + 1}"), button:text-is("${pagina + 1}"), a:has-text("Siguiente"), a:has-text(">")`)
+    if (!nextEl) break
+
+    await nextEl.click()
+    await page.waitForTimeout(2000)
     pagina++
-    await page.waitForTimeout(1500)
-
-    if (pagina > 20) break
+    if (pagina > 30) break
   }
 
   return todas
@@ -136,25 +181,24 @@ async function scrapeActuaciones(page) {
 async function guardarActuaciones(idPjnExp, actuaciones) {
   let nuevas = 0
   for (const a of actuaciones) {
-    if (!a.fecha || !a.tipo || !a.detalle) continue
+    const fechaISO = parseDate(a.fecha)
+    if (!fechaISO || !a.descripcion) continue
 
-    const detEsc  = esc(a.detalle, 999)
+    const detEsc  = esc(a.descripcion, 999)
     const tipoEsc = esc(a.tipo, 99)
-    const ofEsc   = esc(a.oficina, 19)
     const fojEsc  = esc(a.fojas, 49)
 
     const exists = await dbQuery(`
       SELECT 1 FROM pjn_actuaciones
       WHERE id_pjn_expediente = ${idPjnExp}
-        AND fecha   = '${a.fecha}'
-        AND tipo    = '${tipoEsc}'
+        AND fecha   = '${fechaISO}'
         AND detalle = '${detEsc}'
     `)
 
     if (exists.length === 0) {
       await dbQuery(`
-        INSERT INTO pjn_actuaciones (id_pjn_expediente, oficina, fecha, tipo, detalle, fojas)
-        VALUES (${idPjnExp}, '${ofEsc}', '${a.fecha}', '${tipoEsc}', '${detEsc}', '${fojEsc}')
+        INSERT INTO pjn_actuaciones (id_pjn_expediente, fecha, tipo, detalle, fojas)
+        VALUES (${idPjnExp}, '${fechaISO}', '${tipoEsc}', '${detEsc}', '${fojEsc}')
       `)
       nuevas++
 
@@ -164,7 +208,7 @@ async function guardarActuaciones(idPjnExp, actuaciones) {
         const idCaso = expRow[0].id_caso
         await dbQuery(`
           INSERT INTO movimientos (id_caso, fecha_movimiento, tipo_movimiento, titulo, descripcion, id_usuario_registro)
-          VALUES (${idCaso}, '${a.fecha}', '${tipoEsc}', '${detEsc.substring(0,199)}', 'Sincronizado desde PJN', 1)
+          VALUES (${idCaso}, '${fechaISO}', '${tipoEsc}', '${detEsc.substring(0,199)}', 'Sincronizado desde PJN', 1)
         `).catch(e => console.warn(`      ⚠️  Mov interno: ${e.message}`))
       }
     }
@@ -208,12 +252,11 @@ async function main() {
       if (page.url().includes('sso.pjn.gov.ar')) throw new Error('Login fallido — credenciales incorrectas')
       console.log('  ✅ Login OK')
 
-      // ── 2. Ir a mis expedientes como LETRADO ─────────────────
+      // ── 2. Lista de expedientes como LETRADO ─────────────────
       await page.goto('https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam', {
         waitUntil: 'networkidle', timeout: 30000
       })
 
-      // Click LETRADO
       const letradoBtn = await page.$('input[value="LETRADO"], button:has-text("LETRADO")')
       if (letradoBtn) {
         await letradoBtn.click()
@@ -221,11 +264,9 @@ async function main() {
         console.log('  ✅ Filtro LETRADO')
       }
 
-      // ── 3. Extraer filas de la tabla ─────────────────────────
-      // Cada fila tiene: Expediente | Dependencia | Carátula | Situación | Últ.Act. | botón ver
+      // ── 3. Extraer datos de la tabla de expedientes ──────────
       const filas = await page.evaluate(() => {
         const rows = []
-        // La tabla tiene celdas con el nro de expediente (formato: AAA 000000/0000)
         const tds  = [...document.querySelectorAll('td')]
         for (let i = 0; i < tds.length; i++) {
           const txt = tds[i].textContent.trim()
@@ -244,89 +285,84 @@ async function main() {
 
       console.log(`  📁 ${filas.length} expediente(s)`)
 
-      // ── 4. Para cada expediente, hacer click en el ojo 👁 ────
+      // ── 4. Para cada expediente: abrir Libro Digital ─────────
       for (let idx = 0; idx < filas.length; idx++) {
         const fila = filas[idx]
         console.log(`\n  📂 [${idx+1}/${filas.length}] ${fila.nro} — ${fila.caratula.substring(0,50)}`)
 
-        // Buscar caso interno por nro expediente
         const nroEsc   = esc(fila.nro, 49)
         const emailEsc = esc(email)
-        const casoInt  = await dbQuery(`SELECT id_caso FROM casos WHERE nro_expediente = '${nroEsc}' AND activo = 1`).catch(() => [])
-        const idCaso   = casoInt[0]?.id_caso || null
 
-        // Upsert en pjn_expedientes
+        // Buscar caso interno
+        const casoInt = await dbQuery(`SELECT id_caso FROM casos WHERE nro_expediente = '${nroEsc}' AND activo = 1`).catch(() => [])
+        const idCaso  = casoInt[0]?.id_caso || null
+
+        // Upsert expediente
         await dbQuery(`
           MERGE pjn_expedientes AS t
           USING (SELECT '${emailEsc}' AS e, '${nroEsc}' AS n) AS s ON t.email_usuario=s.e AND t.nro_expediente=s.n
           WHEN MATCHED THEN UPDATE SET
             caratula='${esc(fila.caratula)}', dependencia='${esc(fila.dependencia)}',
-            situacion='${esc(fila.situacion,99)}', ultima_act=${fila.ultima_act ? `'${parseDate(fila.ultima_act)}'` : 'NULL'},
+            situacion='${esc(fila.situacion,99)}',
+            ultima_act=${fila.ultima_act ? `'${parseDate(fila.ultima_act)}'` : 'NULL'},
             id_caso=${idCaso ?? 'NULL'}, fecha_sync=GETDATE()
           WHEN NOT MATCHED THEN INSERT (email_usuario,nro_expediente,caratula,dependencia,situacion,ultima_act,id_caso)
           VALUES ('${emailEsc}','${nroEsc}','${esc(fila.caratula)}','${esc(fila.dependencia)}',
                   '${esc(fila.situacion,99)}',${fila.ultima_act ? `'${parseDate(fila.ultima_act)}'` : 'NULL'},${idCaso ?? 'NULL'});
         `)
 
-        const idRow = await dbQuery(`SELECT id FROM pjn_expedientes WHERE email_usuario='${emailEsc}' AND nro_expediente='${nroEsc}'`)
+        const idRow    = await dbQuery(`SELECT id FROM pjn_expedientes WHERE email_usuario='${emailEsc}' AND nro_expediente='${nroEsc}'`)
         const idPjnExp = idRow[0]?.id
         if (!idPjnExp) continue
 
-        // Volver a la lista y hacer click en el link del expediente
+        // Volver a la lista
         await page.goto('https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam', {
           waitUntil: 'networkidle', timeout: 30000
         })
         const letBtn2 = await page.$('input[value="LETRADO"], button:has-text("LETRADO")')
         if (letBtn2) { await letBtn2.click(); await page.waitForLoadState('networkidle', { timeout: 15000 }) }
 
-        // Hacer click en el link "visualizar expediente" del idx-ésimo expediente
-        const verLinks = await page.$$('a:has-text("visualizar expediente"), a[title*="visualizar"], td a[href*="#"]')
-        // Alternativa: buscar links que naveguen al expediente
-        const expLinks = await page.$$eval('a', as =>
-          as.filter(a => a.textContent.trim().toLowerCase().includes('visualizar') ||
-                         a.getAttribute('onclick')?.includes('expediente'))
-            .map((a, i) => i)
-        )
+        // Click en el botón flecha ▼ del idx-ésimo expediente para abrir dropdown
+        const dropdownBtns = await page.$$('button.dropdown-toggle, button[data-toggle="dropdown"], .btn-group button:last-child, td:last-child button')
+        console.log(`    🔽 Botones dropdown encontrados: ${dropdownBtns.length}`)
 
-        // Click en el link del expediente correspondiente por posición
-        const todosLinks = await page.$$('a[href*="consultaListaRelacionados.seam#"]')
-        // Encontrar el que corresponde a este expediente (primer link de la fila)
-        let clickeado = false
-        for (const link of todosLinks) {
-          const txt = await link.textContent()
-          if (txt.trim().toLowerCase().includes('visualizar')) {
-            const filaLinks = await page.$$('a[href*="consultaListaRelacionados.seam#"]:has-text("visualizar")')
-            if (filaLinks[idx]) {
-              await filaLinks[idx].click()
-              await page.waitForURL('**/expediente.seam**', { timeout: 15000 }).catch(() => {})
-              await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
-              clickeado = true
-              break
-            }
-          }
-        }
+        let navegoLibro = false
 
-        if (!clickeado) {
-          // Fallback: usar el ojo (img) de la fila
-          const ojoLinks = await page.$$('a:has(img), a.btn-visualizar, a[title*="Ver"]')
-          if (ojoLinks[idx]) {
-            await ojoLinks[idx].click()
-            await page.waitForURL('**/expediente.seam**', { timeout: 15000 }).catch(() => {})
+        if (dropdownBtns[idx]) {
+          await dropdownBtns[idx].click()
+          await page.waitForTimeout(1000)
+
+          // Click en "Libro digital" del dropdown
+          const libroLink = await page.$('a:has-text("Libro digital"), li:has-text("Libro digital") a, [href*="libroDigital"]')
+          if (libroLink) {
+            await libroLink.click()
+            await page.waitForURL('**/libroDigital.seam**', { timeout: 15000 }).catch(() => {})
             await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
-            clickeado = true
+            navegoLibro = true
           }
         }
 
-        if (!page.url().includes('expediente.seam')) {
-          console.log(`    ⚠️  No se pudo navegar al detalle`)
+        // Fallback: buscar link directo a libroDigital
+        if (!navegoLibro) {
+          const libroDirecto = await page.$(`a[href*="libroDigital"]`)
+          if (libroDirecto) {
+            await libroDirecto.click()
+            await page.waitForURL('**/libroDigital.seam**', { timeout: 15000 }).catch(() => {})
+            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
+            navegoLibro = true
+          }
+        }
+
+        if (!page.url().includes('libroDigital.seam')) {
+          console.log(`    ⚠️  No se pudo abrir Libro Digital. URL: ${page.url()}`)
           continue
         }
 
         console.log(`    🔗 ${page.url()}`)
 
-        // Scrape actuaciones
+        // Extraer y guardar actuaciones
         try {
-          const acts   = await scrapeActuaciones(page)
+          const acts   = await extraerActuacionesLibroDigital(page)
           const nuevas = await guardarActuaciones(idPjnExp, acts)
           console.log(`    ✅ ${acts.length} actuaciones, ${nuevas} nuevas`)
           actCount += nuevas
