@@ -1,53 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Josefin+Sans:wght@300;400;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-slate-100 text-gray-900 antialiased;
-    font-family: 'Segoe UI', Inter, Arial, sans-serif;
+    @apply bg-so-bg text-so-text antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
   }
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #161616; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #484848; }
 }
 
 @layer components {
+  /* ── Badges ─────────────────────────────────── */
   .badge {
-    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold;
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium tracking-wide;
   }
   .badge::before {
     content: '';
     @apply w-1.5 h-1.5 rounded-full flex-shrink-0;
   }
-  .badge-green  { @apply bg-green-100 text-green-700; }
-  .badge-green::before  { @apply bg-green-500; }
-  .badge-amber  { @apply bg-amber-100 text-amber-800; }
+  .badge-green  { @apply bg-emerald-950 text-emerald-400 border border-emerald-900; }
+  .badge-green::before  { @apply bg-emerald-400; }
+  .badge-amber  { @apply bg-amber-950 text-amber-400 border border-amber-900; }
   .badge-amber::before  { @apply bg-amber-400; }
-  .badge-gray   { @apply bg-gray-100 text-gray-600; }
-  .badge-gray::before   { @apply bg-gray-400; }
-  .badge-red    { @apply bg-red-100 text-red-700; }
+  .badge-gray   { @apply bg-so-surface text-so-textMid border border-so-border; }
+  .badge-gray::before   { @apply bg-so-subtle; }
+  .badge-red    { @apply bg-red-950 text-red-400 border border-red-900; }
   .badge-red::before    { @apply bg-red-500; }
-  .badge-blue   { @apply bg-blue-100 text-blue-700; }
+  .badge-blue   { @apply bg-blue-950 text-blue-400 border border-blue-900; }
   .badge-blue::before   { @apply bg-blue-500; }
 
+  /* ── Buttons ─────────────────────────────────── */
   .btn {
-    @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium
-           border border-gray-200 bg-white text-gray-600
-           hover:bg-gray-50 hover:text-gray-900 hover:border-gray-300
+    @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded text-sm font-medium
+           border border-so-border bg-so-card text-so-textMid
+           hover:bg-so-surface hover:text-so-text hover:border-so-muted
            transition-all duration-150 whitespace-nowrap cursor-pointer;
   }
   .btn-primary {
-    @apply bg-blue-600 border-blue-600 text-white
-           hover:bg-blue-700 hover:border-blue-700 hover:text-white;
+    @apply bg-so-red border-so-red text-white
+           hover:bg-so-redBright hover:border-so-redBright hover:text-white;
   }
 
+  /* ── Cards ───────────────────────────────────── */
   .card {
-    @apply bg-white border border-gray-200 rounded-xl shadow-sm;
+    @apply bg-so-card border border-so-border rounded-xl;
   }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { @apply bg-slate-100; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded; }
+  /* ── Input ───────────────────────────────────── */
+  .input {
+    @apply bg-so-surface border border-so-border text-so-text placeholder-so-subtle
+           rounded px-3 py-1.5 text-sm
+           focus:outline-none focus:border-so-muted focus:ring-1 focus:ring-so-muted
+           transition-colors;
+  }
+
+  /* ── Table ───────────────────────────────────── */
+  .table-row-hover {
+    @apply hover:bg-white/[0.03] cursor-pointer transition-colors;
+  }
+
+  /* ── Divider ─────────────────────────────────── */
+  .divider {
+    @apply border-t border-so-border;
+  }
 }

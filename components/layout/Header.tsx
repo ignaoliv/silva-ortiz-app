@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import type { Session } from 'next-auth'
@@ -16,23 +17,33 @@ export default function Header({ user }: { user: Session['user'] }) {
   const path = usePathname()
 
   return (
-    <header className="bg-blue-900 text-white shadow-md sticky top-0 z-40">
-      <div className="max-w-[1400px] mx-auto px-4 h-14 flex items-center gap-6">
+    <header className="bg-so-bg border-b border-so-border sticky top-0 z-40">
+      <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center gap-8">
         {/* Logo */}
-        <Link href="/expedientes" className="font-serif text-2xl font-light tracking-tighter select-none">
-          <i>S</i><sub className="text-base">o</sub>
+        <Link href="/expedientes" className="flex-shrink-0">
+          <Image
+            src="/logo-silva-ortiz.png"
+            alt="Silva Ortiz"
+            width={160}
+            height={28}
+            className="h-7 w-auto brightness-0 invert"
+            priority
+          />
         </Link>
 
+        {/* Separador vertical */}
+        <div className="w-px h-5 bg-so-border flex-shrink-0" />
+
         {/* Nav */}
-        <nav className="flex items-center gap-1 flex-1">
+        <nav className="flex items-center gap-0.5 flex-1">
           {NAV.map(n => (
             <Link
               key={n.href}
               href={n.href}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 text-xs font-medium tracking-widest uppercase transition-colors ${
                 path.startsWith(n.href)
-                  ? 'bg-blue-700 text-white'
-                  : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                  ? 'text-so-text border-b-2 border-so-red pb-[6px]'
+                  : 'text-so-subtle hover:text-so-text'
               }`}
             >
               {n.label}
@@ -40,23 +51,28 @@ export default function Header({ user }: { user: Session['user'] }) {
           ))}
         </nav>
 
+        {/* Badge sistema */}
+        <span className="text-[10px] tracking-widest uppercase text-so-muted hidden md:block">
+          Sistema de gestión
+        </span>
+
         {/* User */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             <div
-              className="w-8 h-8 rounded-full bg-blue-600 border-2 border-blue-500 flex items-center justify-center text-xs font-bold"
+              className="w-7 h-7 rounded-full bg-so-red flex items-center justify-center text-[10px] font-bold text-white"
               title={user?.name ?? ''}
             >
               {initials(user?.name ?? 'U')}
             </div>
-            <span className="text-sm text-blue-200 hidden md:block">{user?.name}</span>
+            <span className="text-xs text-so-textMid hidden lg:block">{user?.name}</span>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: '/auth/login' })}
-            className="text-blue-300 hover:text-white transition-colors p-1"
+            className="text-so-muted hover:text-so-text transition-colors p-1"
             title="Cerrar sesión"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
           </button>
         </div>
       </div>
