@@ -31,6 +31,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          AZURE_STORAGE_CONN_STR: ${{ secrets.AZURE_STORAGE_CONN_STR }}
         run: node scripts/pjn-scraper.mjs
 
       - name: Notificar resultado

@@ -9,6 +9,7 @@ import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import crypto from 'crypto'
+import { BlobServiceClient } from '@azure/storage-blob'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 
@@ -25,12 +26,35 @@ function loadEnv() {
   } catch { return {} }
 }
 
-const env            = loadEnv()
-const DATABASE_URL   = process.env.DATABASE_URL   || env.DATABASE_URL
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || env.ENCRYPTION_KEY
+const env                     = loadEnv()
+const DATABASE_URL            = process.env.DATABASE_URL            || env.DATABASE_URL
+const ENCRYPTION_KEY          = process.env.ENCRYPTION_KEY          || env.ENCRYPTION_KEY
+const AZURE_STORAGE_CONN_STR  = process.env.AZURE_STORAGE_CONN_STR  || env.AZURE_STORAGE_CONN_STR
+const BLOB_CONTAINER          = 'pjn-documentos'
 
 if (!DATABASE_URL)   { console.error('❌ DATABASE_URL no configurado'); process.exit(1) }
 if (!ENCRYPTION_KEY) { console.error('❌ ENCRYPTION_KEY no configurado'); process.exit(1) }
+if (!AZURE_STORAGE_CONN_STR) { console.warn('⚠️  AZURE_STORAGE_CONN_STR no configurado — documentos no se subirán') }
+
+// ── Azure Blob ────────────────────────────────────────────────────
+let blobContainer = null
+async function getBlobContainer() {
+  if (blobContainer) return blobContainer
+  if (!AZURE_STORAGE_CONN_STR) return null
+  const client   = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONN_STR)
+  blobContainer  = client.getContainerClient(BLOB_CONTAINER)
+  await blobContainer.createIfNotExists({ access: 'blob' })
+  return blobContainer
+}
+
+async function subirPDF(buffer, nombre) {
+  const container = await getBlobContainer()
+  if (!container) return null
+  const blobName  = nombre.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const blob      = container.getBlockBlobClient(blobName)
+  await blob.uploadData(buffer, { blobHTTPHeaders: { blobContentType: 'application/pdf' } })
+  return blob.url
+}
 
 // ── Crypto ────────────────────────────────────────────────────────
 function decrypt(data) {
@@ -68,10 +92,136 @@ function esc(s, max = 499) {
   return (String(s || '')).replace(/'/g, "''").substring(0, max)
 }
 
+// ── Encontrar elementos clickeables del panel izquierdo ───────────
+async function encontrarItemsPanel(page) {
+  return page.evaluate(() => {
+    const selectors = [
+      '.rich-table-row',
+      '[class*="actuacion"]',
+      '[id*="actuacion"]',
+      '.panel-left tr',
+      '.left-panel tr',
+      'table tr',
+      'ul li',
+      '.list-group-item',
+    ]
+
+    let items = []
+    for (const sel of selectors) {
+      const found = [...document.querySelectorAll(sel)]
+      const conFecha = found.filter(el => /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || ''))
+      if (conFecha.length > 0) { items = conFecha; break }
+    }
+
+    if (items.length === 0) {
+      items = [...document.querySelectorAll('div, td, li, span')].filter(el => {
+        const t = el.textContent || ''
+        return /\d{2}\/\d{2}\/\d{4}/.test(t) && t.length > 15 && t.length < 2000
+          && !el.querySelector('div, td, li')
+      })
+    }
+
+    return items.map((el, idx) => {
+      const texto = (el.innerText || el.textContent || '').trim()
+      const fechaMatch = texto.match(/(\d{2}\/\d{2}\/\d{4})/)
+      if (!fechaMatch) return null
+      const fecha = fechaMatch[1]
+      const fojasMatch = texto.match(/fs\.\s*([\d\s\/]+)/i) || texto.match(/foja[s]?\s+([\d\s\/]+)/i)
+      const fojas = fojasMatch ? fojasMatch[1].trim() : ''
+      const badgeEl = el.querySelector('[class*="badge"],[class*="circle"],[class*="tipo"],[class*="label"]')
+      const tipo = badgeEl?.textContent?.trim().substring(0, 10) || ''
+      const lineas = texto.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
+      const desc = lineas
+        .filter(l => !l.match(/^\d{2}\/\d{2}\/\d{4}$/) && !l.match(/^fs\./i) && !l.match(/^foja/i) && l.length > 2)
+        .join(' ').trim().substring(0, 900)
+
+      // Guardar un selector único para poder hacer click desde Playwright
+      const id = el.id ? `#${el.id}` : null
+      return { fecha, tipo, descripcion: desc, fojas, domIdx: idx, domId: id }
+    }).filter(Boolean)
+  })
+}
+
+// ── Descargar PDF que se carga en el panel derecho al clickear una fila ─
+async function descargarDocumentoActuacion(page, itemSelector, nroExp, fecha, idx) {
+  try {
+    // Interceptar la respuesta del PDF antes de clickear
+    let pdfBuffer = null
+    let pdfUrl    = null
+
+    const responsePromise = page.waitForResponse(
+      res => res.headers()['content-type']?.includes('pdf') ||
+             res.url().includes('.pdf') ||
+             res.url().includes('verDocumento') ||
+             res.url().includes('getDoc') ||
+             res.url().includes('descargar'),
+      { timeout: 12000 }
+    ).catch(() => null)
+
+    // Click en la fila del panel izquierdo
+    await page.evaluate((sel, domIdx) => {
+      let el
+      if (sel) {
+        el = document.querySelector(sel)
+      } else {
+        // Buscar por índice entre elementos con fecha
+        const todos = [...document.querySelectorAll('div, td, li, tr, span')].filter(e =>
+          /\d{2}\/\d{2}\/\d{4}/.test(e.textContent || '') &&
+          (e.textContent || '').length < 2000 &&
+          !e.querySelector('div, td, li, tr')
+        )
+        el = todos[domIdx]
+      }
+      if (el) el.click()
+    }, itemSelector, idx)
+
+    const response = await responsePromise
+    if (response && response.ok()) {
+      pdfUrl    = response.url()
+      pdfBuffer = await response.body()
+    }
+
+    // Fallback: buscar iframe/embed/object con PDF en el panel derecho
+    if (!pdfBuffer) {
+      await page.waitForTimeout(2000)
+      pdfUrl = await page.evaluate(() => {
+        const src = document.querySelector('iframe[src*="pdf"], iframe[src*="Doc"], embed[src], object[data]')
+        return src?.getAttribute('src') || src?.getAttribute('data') || null
+      })
+      if (pdfUrl) {
+        if (!pdfUrl.startsWith('http')) {
+          pdfUrl = new URL(pdfUrl, 'https://scw.pjn.gov.ar').href
+        }
+        // Descargar con fetch autenticado (usa las cookies de la sesión)
+        pdfBuffer = await page.evaluate(async (url) => {
+          const r = await fetch(url, { credentials: 'include' })
+          if (!r.ok) return null
+          const buf = await r.arrayBuffer()
+          return Array.from(new Uint8Array(buf))
+        }, pdfUrl)
+        if (pdfBuffer) pdfBuffer = Buffer.from(pdfBuffer)
+      }
+    }
+
+    if (!pdfBuffer || pdfBuffer.length < 100) {
+      console.log(`        📄 Sin documento (${pdfBuffer?.length ?? 0} bytes)`)
+      return null
+    }
+
+    // Nombre único: nroExp_fecha_idx.pdf
+    const nombre    = `${nroExp}_${fecha.replace(/\//g, '-')}_${idx}.pdf`
+    const blobUrl   = await subirPDF(pdfBuffer, nombre)
+    if (blobUrl) console.log(`        ☁️  Subido: ${blobUrl.split('?')[0]}`)
+    return blobUrl
+
+  } catch (e) {
+    console.warn(`        ⚠️  Error doc: ${e.message.substring(0, 80)}`)
+    return null
+  }
+}
+
 // ── Extraer actuaciones del Libro Digital ─────────────────────────
-// Estructura JSF/RichFaces: panel izquierdo con lista de actuaciones
-// Cada item tiene: fecha (dd/mm/yyyy), letra tipo (badge/span), descripción, fojas
-async function extraerActuacionesLibroDigital(page) {
+async function extraerActuacionesLibroDigital(page, nroExp) {
   const todas  = []
   let   pagina = 1
 
@@ -79,124 +229,52 @@ async function extraerActuacionesLibroDigital(page) {
     console.log(`      📄 Página ${pagina}...`)
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
 
-    // Loguear estructura del DOM para debug (solo primera página)
+    // Log HTML para debug solo en pág 1
     if (pagina === 1) {
-      const htmlSnip = await page.evaluate(() => {
-        // Buscar el panel izquierdo de actuaciones
-        const body = document.body.innerHTML
-        const idx  = body.toLowerCase().indexOf('actuaci')
-        return idx > -1 ? body.substring(Math.max(0, idx - 200), idx + 800) : body.substring(0, 1000)
+      const snip = await page.evaluate(() => {
+        const b = document.body.innerHTML
+        const i = b.toLowerCase().indexOf('actuaci')
+        return i > -1 ? b.substring(Math.max(0, i - 100), i + 600) : b.substring(0, 600)
       })
-      console.log(`      🔍 HTML snippet: ${htmlSnip.substring(0, 600)}`)
+      console.log(`      🔍 HTML: ${snip.substring(0, 500)}`)
     }
 
-    const items = await page.evaluate(() => {
-      const resultado = []
-
-      // Selectores en orden de especificidad (PJN usa RichFaces/JSF)
-      const selectors = [
-        // Selectores específicos del PJN Libro Digital
-        '.rich-table-row',
-        '.actuacion',
-        '[id*="actuacion"]',
-        '[class*="actuacion"]',
-        // Panel izquierdo genérico
-        '.panel-left tr',
-        '.left-panel tr',
-        // Tabla genérica
-        'table tr',
-        // Lista
-        'ul li',
-        '.list-group-item',
-      ]
-
-      let items = []
-      for (const sel of selectors) {
-        const found = [...document.querySelectorAll(sel)]
-        // Filtrar items que tengan una fecha (dd/mm/yyyy) en su texto
-        const conFecha = found.filter(el => /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || ''))
-        if (conFecha.length > 0) {
-          items = conFecha
-          break
-        }
-      }
-
-      // Fallback: parsear todo el body buscando bloques con fecha
-      if (items.length === 0) {
-        const allEls = [...document.querySelectorAll('div, td, li, span')]
-        items = allEls.filter(el => {
-          const t = el.textContent || ''
-          return /\d{2}\/\d{2}\/\d{4}/.test(t) && t.length > 15 && t.length < 2000
-          && !el.querySelector('div, td, li') // leaf nodes preferidos
-        })
-      }
-
-      for (const item of items) {
-        const texto  = (item.innerText || item.textContent || '').trim()
-        if (!texto || texto.length < 5) continue
-
-        const fechaMatch = texto.match(/(\d{2}\/\d{2}\/\d{4})/)
-        if (!fechaMatch) continue
-        const fecha = fechaMatch[1]
-
-        const fojasMatch = texto.match(/fs\.\s*([\d\s\/]+)/i) || texto.match(/foja[s]?\s+([\d\s\/]+)/i)
-        const fojas      = fojasMatch ? fojasMatch[1].trim() : ''
-
-        // Tipo: buscar badge/círculo (letra sola)
-        const badgeEl = item.querySelector('[class*="badge"], [class*="circle"], [class*="tipo"], [class*="label"]')
-        const tipo     = badgeEl?.textContent?.trim().substring(0, 10) || ''
-
-        // Descripción: texto sin fecha ni fojas
-        const lineas = texto.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
-        const desc   = lineas
-          .filter(l =>
-            !l.match(/^\d{2}\/\d{2}\/\d{4}$/) &&
-            !l.match(/^fs\./i) &&
-            !l.match(/^foja/i) &&
-            l.length > 2
-          )
-          .join(' ')
-          .trim()
-          .substring(0, 900)
-
-        if (fecha && desc) {
-          resultado.push({ fecha, tipo, descripcion: desc, fojas })
-        }
-      }
-
-      // Deduplicar por fecha+descripcion
-      const seen = new Set()
-      return resultado.filter(r => {
-        const k = `${r.fecha}|${r.descripcion.substring(0,80)}`
-        if (seen.has(k)) return false
-        seen.add(k)
-        return true
-      })
-    })
-
+    const items = await encontrarItemsPanel(page)
     console.log(`         ${items.length} actuaciones encontradas`)
 
     if (items.length === 0 && pagina === 1) {
-      const texto = await page.evaluate(() => document.body.innerText)
-      console.log(`         Texto body (primeros 800): ${texto.substring(0, 800)}`)
+      const txt = await page.evaluate(() => document.body.innerText)
+      console.log(`         Texto body: ${txt.substring(0, 600)}`)
     }
 
-    todas.push(...items)
+    // Para cada actuación: clickear la fila y bajar el documento
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      console.log(`        🖱️  [${i+1}/${items.length}] ${item.fecha} — ${item.descripcion.substring(0, 50)}`)
 
-    // Paginación — PJN usa links con números o "Siguiente >"
+      const urlBlob = await descargarDocumentoActuacion(
+        page,
+        item.domId ? `#${item.domId}` : null,
+        nroExp.replace(/\s/g, '_'),
+        item.fecha,
+        i
+      )
+      todas.push({ ...item, urlBlob })
+
+      // Pequeña pausa entre clicks para no saturar el server
+      await page.waitForTimeout(1000)
+    }
+
+    // Paginación
     const hayNext = await page.evaluate((pag) => {
-      const candidates = [...document.querySelectorAll('a, button, span[onclick], td[onclick]')]
-      return candidates.some(el => {
+      return [...document.querySelectorAll('a, button, span[onclick], td[onclick]')].some(el => {
         const t = (el.textContent || '').trim()
-        return t === String(pag + 1) ||
-               t.toLowerCase().includes('siguiente') ||
-               t === '>' || t === '>>'
+        return t === String(pag + 1) || t.toLowerCase().includes('siguiente') || t === '>' || t === '>>'
       })
     }, pagina)
 
     if (!hayNext) break
 
-    // Click en el elemento de paginación
     const nextEl = await page.$(
       `a:text-is("${pagina + 1}"), button:text-is("${pagina + 1}"), ` +
       `a:has-text("Siguiente"), a:has-text(">"), span:has-text("Siguiente")`
@@ -230,10 +308,12 @@ async function guardarActuaciones(idPjnExp, actuaciones) {
         AND detalle = '${detEsc}'
     `)
 
+    const blobEsc = esc(a.urlBlob || '', 999)
+
     if (exists.length === 0) {
       await dbQuery(`
-        INSERT INTO pjn_actuaciones (id_pjn_expediente, fecha, tipo, detalle, fojas)
-        VALUES (${idPjnExp}, '${fechaISO}', '${tipoEsc}', '${detEsc}', '${fojEsc}')
+        INSERT INTO pjn_actuaciones (id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob)
+        VALUES (${idPjnExp}, '${fechaISO}', '${tipoEsc}', '${detEsc}', '${fojEsc}', ${blobEsc ? `'${blobEsc}'` : 'NULL'})
       `)
       nuevas++
 
@@ -242,10 +322,18 @@ async function guardarActuaciones(idPjnExp, actuaciones) {
       if (expRow[0]?.id_caso) {
         const idCaso = expRow[0].id_caso
         await dbQuery(`
-          INSERT INTO movimientos (id_caso, fecha_movimiento, tipo_movimiento, titulo, descripcion, id_usuario_registro)
-          VALUES (${idCaso}, '${fechaISO}', '${tipoEsc}', '${detEsc.substring(0,199)}', 'Sincronizado desde PJN', 1)
+          INSERT INTO movimientos (id_caso, fecha_movimiento, tipo_movimiento, titulo, descripcion, url_documento, id_usuario_registro)
+          VALUES (${idCaso}, '${fechaISO}', '${tipoEsc}', '${detEsc.substring(0,199)}', 'Sincronizado desde PJN',
+                  ${blobEsc ? `'${blobEsc}'` : 'NULL'}, 1)
         `).catch(e => console.warn(`      ⚠️  Mov interno: ${e.message}`))
       }
+    } else if (blobEsc && a.urlBlob) {
+      // Si ya existía la actuación pero ahora tenemos el documento, actualizar url_blob
+      await dbQuery(`
+        UPDATE pjn_actuaciones SET url_blob='${blobEsc}'
+        WHERE id_pjn_expediente=${idPjnExp} AND fecha='${fechaISO}' AND detalle='${detEsc}'
+          AND url_blob IS NULL
+      `).catch(() => {})
     }
   }
   return nuevas
@@ -418,7 +506,7 @@ async function main() {
 
         // Extraer y guardar actuaciones
         try {
-          const acts   = await extraerActuacionesLibroDigital(page)
+          const acts   = await extraerActuacionesLibroDigital(page, fila.nro)
           const nuevas = await guardarActuaciones(idPjnExp, acts)
           console.log(`    ✅ ${acts.length} actuaciones, ${nuevas} nuevas`)
           actCount += nuevas
