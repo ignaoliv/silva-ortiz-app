@@ -1,23 +1,22 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { Search, Video, MapPin } from 'lucide-react'
-import type { EstadoAudiencia, ModalidadAudiencia } from '@/types'
+import type { DBAudiencia } from '@/lib/queries'
 import { fmtDate, cn } from '@/lib/utils'
-import { AUDIENCIAS } from '@/lib/data'
 import { BadgeEstadoAudiencia } from '@/components/ui/Badge'
-
-const ESTADOS: EstadoAudiencia[]     = ['Programada', 'Realizada', 'Cancelada']
-const MODALIDADES: ModalidadAudiencia[] = ['Presencial', 'Virtual']
 
 const selectClass = 'bg-so-surface border border-so-border text-so-textMid text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-so-muted cursor-pointer'
 
-export default function AudienciasTable() {
+export default function AudienciasTable({ audiencias }: { audiencias: DBAudiencia[] }) {
   const [query,     setQuery]     = useState('')
   const [estado,    setEstado]    = useState('')
   const [modalidad, setModalidad] = useState('')
 
+  const estados    = useMemo(() => Array.from(new Set(audiencias.map(a => a.estado))).sort(), [audiencias])
+  const modalidades = ['Presencial', 'Virtual']
+
   const filtered = useMemo(() => {
-    let rows = AUDIENCIAS
+    let rows = audiencias
     if (query)     rows = rows.filter(a =>
       a.caratula.toLowerCase().includes(query.toLowerCase()) ||
       a.tipo.toLowerCase().includes(query.toLowerCase()) ||
@@ -26,7 +25,7 @@ export default function AudienciasTable() {
     if (estado)    rows = rows.filter(a => a.estado    === estado)
     if (modalidad) rows = rows.filter(a => a.modalidad === modalidad)
     return [...rows].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
-  }, [query, estado, modalidad])
+  }, [audiencias, query, estado, modalidad])
 
   return (
     <div className="card">
@@ -34,16 +33,15 @@ export default function AudienciasTable() {
         <div className="relative flex-1 min-w-[200px]">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-so-muted" />
           <input type="text" placeholder="Buscar audiencia..." value={query}
-            onChange={e => setQuery(e.target.value)}
-            className="input w-full pl-8" />
+            onChange={e => setQuery(e.target.value)} className="input w-full pl-8" />
         </div>
         <select value={estado}    onChange={e => setEstado(e.target.value)}    className={selectClass}>
           <option value="">Estado</option>
-          {ESTADOS.map(e => <option key={e}>{e}</option>)}
+          {estados.map(e => <option key={e}>{e}</option>)}
         </select>
         <select value={modalidad} onChange={e => setModalidad(e.target.value)} className={selectClass}>
           <option value="">Modalidad</option>
-          {MODALIDADES.map(m => <option key={m}>{m}</option>)}
+          {modalidades.map(m => <option key={m}>{m}</option>)}
         </select>
         <span className="ml-auto text-[10px] tracking-widest uppercase text-so-muted">{filtered.length} audiencias</span>
       </div>
@@ -58,18 +56,19 @@ export default function AudienciasTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-so-border">
+            {filtered.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-8 text-center text-xs text-so-muted">Sin audiencias</td></tr>
+            )}
             {filtered.map(a => (
               <tr key={a.id} className="table-row-hover">
                 <td className="px-3 py-3 whitespace-nowrap">
                   <p className="text-sm font-medium text-so-text">{fmtDate(a.fecha)}</p>
                   <p className="text-[11px] text-so-muted">{a.hora}</p>
                 </td>
-                <td className="px-3 py-3 max-w-[260px]">
+                <td className="px-3 py-3 max-w-[240px]">
                   <p className="text-sm text-so-text truncate">{a.caratula}</p>
                 </td>
-                <td className="px-3 py-3">
-                  <span className="text-xs text-so-subtle">{a.tipo}</span>
-                </td>
+                <td className="px-3 py-3 text-xs text-so-subtle">{a.tipo}</td>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-1 text-xs text-so-muted">
                     {a.modalidad === 'Virtual'

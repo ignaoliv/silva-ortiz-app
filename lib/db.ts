@@ -1,57 +1,47 @@
 import sql from 'mssql'
 
-const CONNECTION_STRING = process.env.DATABASE_URL
+const CS = process.env.DATABASE_URL
 
-/**
- * Intenta conectarse a la base de datos SQL Server.
- * Reintenta `retries` veces antes de rendirse.
- * Devuelve true si la conexión fue exitosa, false en caso contrario.
- */
-export async function checkDB(retries = 2): Promise<boolean> {
-  if (!CONNECTION_STRING) {
+// Reutilizar pool entre requests en producción
+let _pool: sql.ConnectionPool | null = null
+
+async function getPool(retries = 2): Promise<sql.ConnectionPool | null> {
+  if (!CS) {
     console.warn('[DB] DATABASE_URL no está configurada.')
-    return false
+    return null
   }
+  if (_pool?.connected) return _pool
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  for (let i = 1; i <= retries; i++) {
     try {
-      console.log(`[DB] Intento ${attempt} de ${retries}...`)
-      const pool = new sql.ConnectionPool(CONNECTION_STRING)
-      await pool.connect()
-      await pool.close()
+      console.log(`[DB] Intento ${i} de ${retries}...`)
+      _pool = await new sql.ConnectionPool(CS).connect()
       console.log('[DB] Conexión exitosa.')
-      return true
+      return _pool
     } catch (err) {
-      console.error(`[DB] Intento ${attempt} fallido:`, err)
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 1500))
-      }
+      console.error(`[DB] Intento ${i} fallido:`, (err as Error).message)
+      _pool = null
+      if (i < retries) await new Promise(r => setTimeout(r, 1500))
     }
   }
-
-  console.error(`[DB] No se pudo conectar después de ${retries} intentos.`)
-  return false
+  console.error('[DB] No se pudo conectar después de', retries, 'intentos.')
+  return null
 }
 
-/**
- * Ejecuta una query y devuelve los resultados.
- * Devuelve null si no hay conexión o la query falla.
- */
-export async function query<T = Record<string, unknown>>(
-  q: string,
-  retries = 2
-): Promise<T[] | null> {
-  if (!CONNECTION_STRING) return null
+export async function checkDB(retries = 2): Promise<boolean> {
+  return (await getPool(retries)) !== null
+}
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const pool = await sql.connect(CONNECTION_STRING)
-      const result = await pool.request().query(q)
-      return result.recordset as T[]
-    } catch (err) {
-      console.error(`[DB] Query intento ${attempt} fallido:`, err)
-      if (attempt < retries) await new Promise(r => setTimeout(r, 1500))
-    }
+export async function query<T = Record<string, unknown>>(
+  q: string
+): Promise<T[] | null> {
+  const pool = await getPool()
+  if (!pool) return null
+  try {
+    const result = await pool.request().query(q)
+    return result.recordset as T[]
+  } catch (err) {
+    console.error('[DB] Query error:', (err as Error).message)
+    return null
   }
-  return null
 }

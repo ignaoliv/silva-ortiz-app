@@ -1,13 +1,13 @@
 'use client'
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import type { Audiencia } from '@/types'
+import type { DBAudiencia } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const DIAS  = ['Lu','Ma','Mi','Ju','Vi','Sa','Do']
 
-export default function MiniCalendar({ audiencias }: { audiencias: Audiencia[] }) {
+export default function MiniCalendar({ audiencias }: { audiencias: DBAudiencia[] }) {
   const hoy = new Date()
   const [year, setYear]   = useState(hoy.getFullYear())
   const [month, setMonth] = useState(hoy.getMonth())

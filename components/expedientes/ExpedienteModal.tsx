@@ -1,9 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { X, FileText, Clock, Calendar, DollarSign } from 'lucide-react'
-import type { Caso } from '@/types'
+import type { DBCaso, DBMovimiento, DBAudiencia, DBHonorario } from '@/lib/queries'
 import { fmtDateLarga, fmtMoney, cn } from '@/lib/utils'
-import { getCliente, getUsuario, getMovimientos, AUDIENCIAS } from '@/lib/data'
 import { BadgeEstadoCaso } from '@/components/ui/Badge'
 
 const TABS = [
@@ -13,30 +12,36 @@ const TABS = [
   { id: 'honorarios',  label: 'Honorarios',  icon: DollarSign },
 ]
 
-const MOV_DOT: Record<string, string> = {
-  green:  'bg-emerald-500',
-  blue:   'bg-blue-500',
-  orange: 'bg-amber-500',
-}
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-const HONORARIOS = [
-  { concepto: 'Honorarios iniciales',     fecha: '2024-02-01', monto: 150000, estado: 'Pagado'    },
-  { concepto: 'Segunda cuota',            fecha: '2024-05-01', monto: 150000, estado: 'Pagado'    },
-  { concepto: 'Honorarios por audiencia', fecha: '2024-09-15', monto: 80000,  estado: 'Pendiente' },
-]
-
-export default function ExpedienteModal({ caso, onClose }: { caso: Caso; onClose: () => void }) {
-  const [tab, setTab] = useState('detalle')
-  const cliente     = getCliente(caso.cliente_id)
-  const responsable = getUsuario(caso.responsable_id)
-  const movs        = getMovimientos(caso.id)
-  const auds        = AUDIENCIAS.filter(a => a.caso_id === caso.id)
+export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClose: () => void }) {
+  const [tab,       setTab]       = useState('detalle')
+  const [movs,      setMovs]      = useState<DBMovimiento[]>([])
+  const [auds,      setAuds]      = useState<DBAudiencia[]>([])
+  const [hons,      setHons]      = useState<DBHonorario[]>([])
+  const [loading,   setLoading]   = useState(false)
 
   useEffect(() => {
-    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', fn)
-    return () => document.removeEventListener('keydown', fn)
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
   }, [onClose])
+
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
+      const [m, h] = await Promise.all([
+        fetch(`/api/casos/${caso.id}/movimientos`).then(r => r.json()),
+        fetch(`/api/casos/${caso.id}/honorarios`).then(r => r.json()),
+      ])
+      setMovs(m)
+      setHons(h)
+      setLoading(false)
+    }
+    fetchData()
+  }, [caso.id])
+
+  const MOV_COLORS = ['bg-so-red','bg-blue-500','bg-emerald-500','bg-amber-500','bg-purple-500']
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
@@ -75,18 +80,18 @@ export default function ExpedienteModal({ caso, onClose }: { caso: Caso; onClose
         <div className="flex-1 overflow-y-auto p-6">
           {tab === 'detalle' && (
             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-              {[
+              {([
                 ['Expediente',     caso.exp],
                 ['Fuero',          caso.fuero],
                 ['Jurisdicción',   caso.jurisdiccion],
-                ['Tipo',           caso.tipo],
-                ['Cliente',        cliente.nombre],
-                ['Responsable',    responsable.nombre],
-                ['Fecha de alta',  fmtDateLarga(caso.fecha_alta)],
-                ['Notificación',   fmtDateLarga(caso.fecha_notif)],
+                ['Tipo de proceso',caso.tipo],
+                ['Cliente',        caso.clienteNombre],
+                ['Responsable',    caso.responsableNombre],
+                ['Fecha de alta',  fmtDateLarga(caso.fechaAlta)],
+                ['Notificación',   fmtDateLarga(caso.fechaNotif)],
                 ['Vencimiento',    fmtDateLarga(caso.vencimiento)],
-                ['Monto en juego', caso.monto ? fmtMoney(caso.monto) : '—'],
-              ].map(([label, value]) => (
+                ['Monto reclamado',caso.monto ? fmtMoney(caso.monto) : '—'],
+              ] as [string, string][]).map(([label, value]) => (
                 <div key={label}>
                   <p className="text-[10px] tracking-widest uppercase text-so-muted mb-1">{label}</p>
                   <p className="text-sm text-so-text">{value}</p>
@@ -96,84 +101,82 @@ export default function ExpedienteModal({ caso, onClose }: { caso: Caso; onClose
           )}
 
           {tab === 'movimientos' && (
-            <ol className="relative border-l border-so-border ml-3 space-y-6">
-              {movs.map(m => (
-                <li key={m.id} className="ml-6">
-                  <span className={cn('absolute -left-[9px] w-4 h-4 rounded-full border-2 border-so-card', MOV_DOT[m.color])} />
-                  <div className="flex items-baseline gap-2 mb-0.5">
-                    <span className="text-xs font-medium text-so-text">{m.titulo}</span>
-                    <span className="text-[10px] text-so-muted">{m.tipo}</span>
-                  </div>
-                  <p className="text-xs text-so-subtle leading-relaxed">{m.desc}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-so-muted">{m.user}</span>
-                    <span className="text-so-border">·</span>
-                    <span className="text-[10px] text-so-muted">{fmtDateLarga(m.fecha)}</span>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            loading
+              ? <p className="text-so-muted text-xs text-center py-8">Cargando...</p>
+              : movs.length === 0
+              ? <p className="text-so-muted text-xs text-center py-8">Sin movimientos registrados</p>
+              : <ol className="relative border-l border-so-border ml-3 space-y-6">
+                  {movs.map((m, i) => (
+                    <li key={m.id} className="ml-6">
+                      <span className={cn('absolute -left-[9px] w-4 h-4 rounded-full border-2 border-so-card', MOV_COLORS[i % MOV_COLORS.length])} />
+                      <div className="flex items-baseline gap-2 mb-0.5">
+                        <span className="text-xs font-medium text-so-text">{m.titulo}</span>
+                        <span className="text-[10px] text-so-muted">{m.tipo}</span>
+                      </div>
+                      {m.descripcion && <p className="text-xs text-so-subtle leading-relaxed">{m.descripcion}</p>}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-so-muted">{m.usuario}</span>
+                        <span className="text-so-border">·</span>
+                        <span className="text-[10px] text-so-muted">{fmtDateLarga(m.fecha)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
           )}
 
           {tab === 'audiencias' && (
-            <div>
-              {auds.length === 0
-                ? <p className="text-sm text-so-muted text-center py-8">Sin audiencias registradas</p>
-                : <ul className="space-y-3">
-                    {auds.map(a => (
-                      <li key={a.id} className="flex items-start gap-4 p-3 rounded-lg bg-so-surface border border-so-border">
-                        <div className="text-center w-10 flex-shrink-0">
-                          <p className="text-xl font-light text-so-text leading-none">{a.fecha.split('-')[2]}</p>
-                          <p className="text-[10px] text-so-muted">
-                            {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(a.fecha.split('-')[1]) - 1]}
-                          </p>
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-so-text">{a.tipo}</p>
-                          <p className="text-xs text-so-subtle">{a.hora} · {a.lugar}</p>
-                          <p className="text-[10px] text-so-muted mt-0.5">{a.abogado} · {a.modalidad}</p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-              }
-            </div>
+            auds.length === 0
+              ? <p className="text-so-muted text-xs text-center py-8">Sin audiencias registradas</p>
+              : <ul className="space-y-3">
+                  {auds.map(a => (
+                    <li key={a.id} className="flex items-start gap-4 p-3 rounded-lg bg-so-surface border border-so-border">
+                      <div className="text-center w-10 flex-shrink-0">
+                        <p className="text-xl font-light text-so-text leading-none">{a.fecha.split('-')[2]}</p>
+                        <p className="text-[10px] text-so-muted">{MESES[parseInt(a.fecha.split('-')[1]) - 1]}</p>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-so-text">{a.tipo}</p>
+                        <p className="text-xs text-so-subtle">{a.hora} · {a.lugar}</p>
+                        <p className="text-[10px] text-so-muted mt-0.5">{a.abogado} · {a.modalidad}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
           )}
 
           {tab === 'honorarios' && (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-so-border">
-                  <th className="pb-2 text-left text-[10px] tracking-widest uppercase text-so-muted font-medium">Concepto</th>
-                  <th className="pb-2 text-left text-[10px] tracking-widest uppercase text-so-muted font-medium">Fecha</th>
-                  <th className="pb-2 text-right text-[10px] tracking-widest uppercase text-so-muted font-medium">Monto</th>
-                  <th className="pb-2 text-right text-[10px] tracking-widest uppercase text-so-muted font-medium">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-so-border">
-                {HONORARIOS.map(h => (
-                  <tr key={h.concepto}>
-                    <td className="py-3 text-so-text text-xs">{h.concepto}</td>
-                    <td className="py-3 text-so-subtle text-xs">{fmtDateLarga(h.fecha)}</td>
-                    <td className="py-3 text-right font-medium text-so-text text-xs">{fmtMoney(h.monto)}</td>
-                    <td className="py-3 text-right">
-                      <span className={cn('badge', h.estado === 'Pagado' ? 'badge-green' : 'badge-amber')}>
-                        {h.estado}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-so-border">
-                  <td colSpan={2} className="pt-3 text-[10px] tracking-widest uppercase text-so-muted">Total</td>
-                  <td className="pt-3 text-right font-medium text-so-text text-xs">
-                    {fmtMoney(HONORARIOS.reduce((s, h) => s + h.monto, 0))}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+            loading
+              ? <p className="text-so-muted text-xs text-center py-8">Cargando...</p>
+              : hons.length === 0
+              ? <p className="text-so-muted text-xs text-center py-8">Sin honorarios registrados</p>
+              : <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-so-border">
+                      {['Concepto','Fecha','Monto','Estado'].map(h => (
+                        <th key={h} className={cn('pb-2 text-[10px] tracking-widest uppercase text-so-muted font-medium', h === 'Monto' || h === 'Estado' ? 'text-right' : 'text-left')}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-so-border">
+                    {hons.map(h => (
+                      <tr key={h.id}>
+                        <td className="py-3 text-so-text text-xs">{h.concepto}</td>
+                        <td className="py-3 text-so-subtle text-xs">{fmtDateLarga(h.fecha)}</td>
+                        <td className="py-3 text-right font-medium text-so-text text-xs">{fmtMoney(h.monto)}</td>
+                        <td className="py-3 text-right">
+                          <span className={cn('badge', h.estado.toLowerCase().includes('pag') ? 'badge-green' : 'badge-amber')}>{h.estado}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-so-border">
+                      <td colSpan={2} className="pt-3 text-[10px] tracking-widest uppercase text-so-muted">Total</td>
+                      <td className="pt-3 text-right font-medium text-so-text text-xs">{fmtMoney(hons.reduce((s, h) => s + h.monto, 0))}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
           )}
         </div>
       </div>

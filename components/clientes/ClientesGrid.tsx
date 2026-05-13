@@ -1,24 +1,26 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { Search, Building2, User, Briefcase, Mail, Phone } from 'lucide-react'
-import { CLIENTES, CASOS } from '@/lib/data'
+import type { DBCliente, DBCaso } from '@/lib/queries'
 import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
 
 const selectClass = 'bg-so-surface border border-so-border text-so-textMid text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-so-muted cursor-pointer'
 
-export default function ClientesGrid() {
+const COLORS = ['#82181a','#2563eb','#059669','#d97706','#7c3aed','#0891b2','#dc2626','#0284c7']
+
+export default function ClientesGrid({ clientes, casos }: { clientes: DBCliente[]; casos: DBCaso[] }) {
   const [query, setQuery] = useState('')
   const [tipo,  setTipo]  = useState('')
 
   const filtered = useMemo(() => {
-    let rows = CLIENTES
+    let rows = clientes
     if (query) rows = rows.filter(c => c.nombre.toLowerCase().includes(query.toLowerCase()) || c.cuit.includes(query))
     if (tipo)  rows = rows.filter(c => c.tipo === tipo)
     return rows
-  }, [query, tipo])
+  }, [clientes, query, tipo])
 
-  const casosActivos = (id: number) => CASOS.filter(c => c.cliente_id === id && !c.cerrado).length
+  const casosActivos = (id: number) => casos.filter(c => c.clienteId === id && !c.cerrado).length
 
   return (
     <div>
@@ -37,14 +39,15 @@ export default function ClientesGrid() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filtered.map(c => {
+        {filtered.map((c, i) => {
           const activos    = casosActivos(c.id)
           const isJuridica = c.tipo === 'Persona jurídica'
+          const color      = COLORS[i % COLORS.length]
           return (
             <div key={c.id} className="card p-5 hover:border-so-muted transition-colors cursor-default">
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                     style={{ backgroundColor: c.color }}>
+                     style={{ backgroundColor: color }}>
                   {isJuridica ? <Building2 size={16} /> : c.nombre.split(' ').slice(0, 2).map(w => w[0]).join('')}
                 </div>
                 <div className="flex-1 min-w-0">

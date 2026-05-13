@@ -1,4 +1,5 @@
 import { checkDB } from '@/lib/db'
+import { getClientes, getCasos } from '@/lib/queries'
 import DBError from '@/components/ui/DBError'
 import ClientesGrid from '@/components/clientes/ClientesGrid'
 
@@ -8,10 +9,9 @@ export default async function ClientesPage() {
   const connected = await checkDB(2)
   if (!connected) return <DBError />
 
+  const [clientes, casos] = await Promise.all([getClientes(), getCasos()])
+
   return (
-    <>
-      <h1 className="text-lg font-semibold text-gray-800 mb-4">Clientes</h1>
-      <ClientesGrid />
-    </>
+    <ClientesGrid clientes={clientes} casos={casos} />
   )
 }
