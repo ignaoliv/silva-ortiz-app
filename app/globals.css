@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-100 text-gray-900 antialiased;
+    font-family: 'Segoe UI', Inter, Arial, sans-serif;
+  }
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .badge::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-full flex-shrink-0;
+  }
+  .badge-green  { @apply bg-green-100 text-green-700; }
+  .badge-green::before  { @apply bg-green-500; }
+  .badge-amber  { @apply bg-amber-100 text-amber-800; }
+  .badge-amber::before  { @apply bg-amber-400; }
+  .badge-gray   { @apply bg-gray-100 text-gray-600; }
+  .badge-gray::before   { @apply bg-gray-400; }
+  .badge-red    { @apply bg-red-100 text-red-700; }
+  .badge-red::before    { @apply bg-red-500; }
+  .badge-blue   { @apply bg-blue-100 text-blue-700; }
+  .badge-blue::before   { @apply bg-blue-500; }
+
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium
+           border border-gray-200 bg-white text-gray-600
+           hover:bg-gray-50 hover:text-gray-900 hover:border-gray-300
+           transition-all duration-150 whitespace-nowrap cursor-pointer;
+  }
+  .btn-primary {
+    @apply bg-blue-600 border-blue-600 text-white
+           hover:bg-blue-700 hover:border-blue-700 hover:text-white;
+  }
+
+  .card {
+    @apply bg-white border border-gray-200 rounded-xl shadow-sm;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { @apply bg-slate-100; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded; }
+}
