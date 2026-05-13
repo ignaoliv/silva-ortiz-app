@@ -1,11 +1,12 @@
 'use client'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import type { Session } from 'next-auth'
-import { LogOut } from 'lucide-react'
+import { LogOut, User } from 'lucide-react'
 import { initials } from '@/lib/utils'
+import { useState, useRef, useEffect } from 'react'
 
 const NAV = [
   { href: '/expedientes', label: 'Expedientes' },
@@ -14,7 +15,18 @@ const NAV = [
 ]
 
 export default function Header({ user }: { user: Session['user'] }) {
-  const path = usePathname()
+  const path    = usePathname()
+  const router  = useRouter()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
 
   return (
     <header className="bg-so-bg border-b border-so-border sticky top-0 z-40">
@@ -57,23 +69,44 @@ export default function Header({ user }: { user: Session['user'] }) {
         </span>
 
         {/* User */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full bg-so-red flex items-center justify-center text-[10px] font-bold text-white"
-              title={user?.name ?? ''}
+        <div className="flex items-center gap-3 flex-shrink-0" ref={ref}>
+          <div className="relative">
+            <button
+              onClick={() => setOpen(v => !v)}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              {initials(user?.name ?? 'U')}
-            </div>
-            <span className="text-xs text-so-textMid hidden lg:block">{user?.name}</span>
+              <div
+                className="w-7 h-7 rounded-full bg-so-red flex items-center justify-center text-[10px] font-bold text-white"
+                title={user?.name ?? ''}
+              >
+                {initials(user?.name ?? 'U')}
+              </div>
+              <span className="text-xs text-so-textMid hidden lg:block">{user?.name}</span>
+            </button>
+
+            {open && (
+              <div className="absolute right-0 top-10 w-48 bg-so-card border border-so-border rounded-lg shadow-xl overflow-hidden z-50">
+                <div className="px-4 py-3 border-b border-so-border">
+                  <p className="text-xs font-medium text-so-text truncate">{user?.name}</p>
+                  <p className="text-[10px] text-so-muted truncate">{user?.email}</p>
+                </div>
+                <button
+                  onClick={() => { setOpen(false); router.push('/perfil') }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-so-textMid hover:bg-so-surface hover:text-so-text transition-colors"
+                >
+                  <User size={13} />
+                  Mi perfil
+                </button>
+                <button
+                  onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs text-red-400 hover:bg-so-surface transition-colors border-t border-so-border"
+                >
+                  <LogOut size={13} />
+                  Cerrar sesión
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            onClick={() => signOut({ callbackUrl: '/auth/login' })}
-            className="text-so-muted hover:text-so-text transition-colors p-1"
-            title="Cerrar sesión"
-          >
-            <LogOut size={15} />
-          </button>
         </div>
       </div>
     </header>
