@@ -1,0 +1,38 @@
+name: PJN Sync Nocturno
+
+on:
+  schedule:
+    # Corre a las 2:00 AM hora Argentina (UTC-3) = 05:00 UTC
+    - cron: '0 5 * * *'
+  workflow_dispatch:  # Permite correrlo manualmente desde GitHub
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Playwright + Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Correr scraper PJN
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+        run: node scripts/pjn-scraper.mjs
+
+      - name: Notificar resultado
+        if: failure()
+        run: echo "❌ El scraper PJN falló. Revisar logs."
