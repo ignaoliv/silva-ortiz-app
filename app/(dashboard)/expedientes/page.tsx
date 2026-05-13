@@ -1,3 +1,5 @@
+import { checkDB } from '@/lib/db'
+import DBError from '@/components/ui/DBError'
 import KPICards from '@/components/expedientes/KPICards'
 import ExpedientesTable from '@/components/expedientes/ExpedientesTable'
 import VencimientosSidebar from '@/components/expedientes/VencimientosSidebar'
@@ -5,7 +7,10 @@ import { getKPIs, CASOS } from '@/lib/data'
 
 export const metadata = { title: 'Expedientes · Silva Ortiz' }
 
-export default function ExpedientesPage() {
+export default async function ExpedientesPage() {
+  const connected = await checkDB(2)
+  if (!connected) return <DBError />
+
   const kpis = getKPIs()
 
   return (
