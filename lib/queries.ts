@@ -303,6 +303,181 @@ export async function getKPIs(): Promise<DBKPIs> {
   }
 }
 
+// ── Notas, Instrucciones y Negociación ────────────────────────────────────────
+
+export interface DBNotas {
+  contenido:  string
+  fechaMod:   string | null
+}
+
+export interface DBInstrucciones {
+  contenido:  string
+  fechaMod:   string | null
+}
+
+export interface DBNegociacion {
+  montoMaxCliente: number | null
+  montoOfrecido:   number | null
+  contraoferta:    number | null
+  estado:          string
+  notas:           string | null
+  fechaMod:        string | null
+  historial:       DBOfertaHistorial[]
+}
+
+export interface DBOfertaHistorial {
+  id:          number
+  tipo:        string   // 'Oferta' | 'Contraoferta' | 'Acuerdo' | 'Rechazo'
+  monto:       number | null
+  descripcion: string | null
+  fecha:       string
+}
+
+function esc(s: string) {
+  return s.replace(/'/g, "''")
+}
+
+export async function getNotasByCaso(casoId: number): Promise<DBNotas> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT contenido, fecha_mod FROM caso_notas WHERE id_caso = ${casoId}
+  `)
+  const r = rows?.[0]
+  return {
+    contenido: (r?.contenido as string) ?? '',
+    fechaMod:  r?.fecha_mod ? toDate(r.fecha_mod) : null,
+  }
+}
+
+export async function upsertNotas(casoId: number, contenido: string): Promise<void> {
+  await query(`
+    MERGE caso_notas AS t
+    USING (SELECT ${casoId} AS id_caso) AS s ON t.id_caso = s.id_caso
+    WHEN MATCHED THEN
+      UPDATE SET contenido = N'${esc(contenido)}', fecha_mod = GETDATE()
+    WHEN NOT MATCHED THEN
+      INSERT (id_caso, contenido) VALUES (${casoId}, N'${esc(contenido)}');
+  `)
+}
+
+export async function getInstruccionesByCaso(casoId: number): Promise<DBInstrucciones> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT contenido, fecha_mod FROM caso_instrucciones WHERE id_caso = ${casoId}
+  `)
+  const r = rows?.[0]
+  return {
+    contenido: (r?.contenido as string) ?? '',
+    fechaMod:  r?.fecha_mod ? toDate(r.fecha_mod) : null,
+  }
+}
+
+export async function upsertInstrucciones(casoId: number, contenido: string): Promise<void> {
+  await query(`
+    MERGE caso_instrucciones AS t
+    USING (SELECT ${casoId} AS id_caso) AS s ON t.id_caso = s.id_caso
+    WHEN MATCHED THEN
+      UPDATE SET contenido = N'${esc(contenido)}', fecha_mod = GETDATE()
+    WHEN NOT MATCHED THEN
+      INSERT (id_caso, contenido) VALUES (${casoId}, N'${esc(contenido)}');
+  `)
+}
+
+export async function getNegociacionByCaso(casoId: number): Promise<DBNegociacion> {
+  const [negRows, histRows] = await Promise.all([
+    query<Record<string, unknown>>(`
+      SELECT monto_max_cliente, monto_ofrecido, contraoferta, estado, notas, fecha_mod
+      FROM caso_negociacion WHERE id_caso = ${casoId}
+    `),
+    query<Record<string, unknown>>(`
+      SELECT id_historial, tipo, monto, descripcion, fecha
+      FROM caso_negociacion_historial
+      WHERE id_caso = ${casoId}
+      ORDER BY fecha DESC
+    `),
+  ])
+  const n = negRows?.[0]
+  return {
+    montoMaxCliente: n?.monto_max_cliente != null ? Number(n.monto_max_cliente) : null,
+    montoOfrecido:   n?.monto_ofrecido   != null ? Number(n.monto_ofrecido)   : null,
+    contraoferta:    n?.contraoferta     != null ? Number(n.contraoferta)     : null,
+    estado:          (n?.estado as string) ?? 'Sin iniciar',
+    notas:           (n?.notas as string) ?? null,
+    fechaMod:        n?.fecha_mod ? toDate(n.fecha_mod) : null,
+    historial: (histRows ?? []).map(r => ({
+      id:          r.id_historial as number,
+      tipo:        r.tipo as string,
+      monto:       r.monto != null ? Number(r.monto) : null,
+      descripcion: (r.descripcion as string) ?? null,
+      fecha:       toDate(r.fecha) ?? '',
+    })),
+  }
+}
+
+export async function upsertNegociacion(
+  casoId: number,
+  data: {
+    montoMaxCliente?: number | null
+    montoOfrecido?:   number | null
+    contraoferta?:    number | null
+    estado?:          string
+    notas?:           string | null
+  }
+): Promise<void> {
+  const max  = data.montoMaxCliente != null ? data.montoMaxCliente : 'NULL'
+  const ofr  = data.montoOfrecido   != null ? data.montoOfrecido   : 'NULL'
+  const cnt  = data.contraoferta    != null ? data.contraoferta    : 'NULL'
+  const est  = esc(data.estado ?? 'En curso')
+  const not  = data.notas != null ? `N'${esc(data.notas)}'` : 'NULL'
+  await query(`
+    MERGE caso_negociacion AS t
+    USING (SELECT ${casoId} AS id_caso) AS s ON t.id_caso = s.id_caso
+    WHEN MATCHED THEN
+      UPDATE SET monto_max_cliente = ${max}, monto_ofrecido = ${ofr},
+                 contraoferta = ${cnt}, estado = '${est}', notas = ${not},
+                 fecha_mod = GETDATE()
+    WHEN NOT MATCHED THEN
+      INSERT (id_caso, monto_max_cliente, monto_ofrecido, contraoferta, estado, notas)
+      VALUES (${casoId}, ${max}, ${ofr}, ${cnt}, '${est}', ${not});
+  `)
+}
+
+export async function addOfertaHistorial(
+  casoId: number,
+  tipo: string,
+  monto: number | null,
+  descripcion: string | null
+): Promise<void> {
+  const m   = monto       != null ? monto       : 'NULL'
+  const d   = descripcion != null ? `N'${esc(descripcion)}'` : 'NULL'
+  const t   = esc(tipo)
+  await query(`
+    INSERT INTO caso_negociacion_historial (id_caso, tipo, monto, descripcion)
+    VALUES (${casoId}, '${t}', ${m}, ${d})
+  `)
+  // Actualizar el campo correspondiente en caso_negociacion también
+  if (tipo === 'Oferta' && monto != null) {
+    await query(`
+      MERGE caso_negociacion AS tbl
+      USING (SELECT ${casoId} AS id_caso) AS s ON tbl.id_caso = s.id_caso
+      WHEN MATCHED THEN UPDATE SET monto_ofrecido = ${monto}, fecha_mod = GETDATE()
+      WHEN NOT MATCHED THEN INSERT (id_caso, monto_ofrecido, estado) VALUES (${casoId}, ${monto}, 'En curso');
+    `)
+  } else if (tipo === 'Contraoferta' && monto != null) {
+    await query(`
+      MERGE caso_negociacion AS tbl
+      USING (SELECT ${casoId} AS id_caso) AS s ON tbl.id_caso = s.id_caso
+      WHEN MATCHED THEN UPDATE SET contraoferta = ${monto}, fecha_mod = GETDATE()
+      WHEN NOT MATCHED THEN INSERT (id_caso, contraoferta, estado) VALUES (${casoId}, ${monto}, 'En curso');
+    `)
+  } else if (tipo === 'Acuerdo') {
+    await query(`
+      MERGE caso_negociacion AS tbl
+      USING (SELECT ${casoId} AS id_caso) AS s ON tbl.id_caso = s.id_caso
+      WHEN MATCHED THEN UPDATE SET estado = 'Acuerdo', fecha_mod = GETDATE()
+      WHEN NOT MATCHED THEN INSERT (id_caso, estado) VALUES (${casoId}, 'Acuerdo');
+    `)
+  }
+}
+
 // ── PJN ───────────────────────────────────────────────────────────────────────
 
 export interface DBPjnExpediente {

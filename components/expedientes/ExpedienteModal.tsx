@@ -1,15 +1,21 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { X, FileText, Clock, Calendar, DollarSign } from 'lucide-react'
+import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake } from 'lucide-react'
 import type { DBCaso, DBMovimiento, DBAudiencia, DBHonorario } from '@/lib/queries'
 import { fmtDateLarga, fmtMoney, cn } from '@/lib/utils'
 import { BadgeEstadoCaso } from '@/components/ui/Badge'
+import TabNotas from '@/components/expedientes/TabNotas'
+import TabInstrucciones from '@/components/expedientes/TabInstrucciones'
+import TabNegociacion from '@/components/expedientes/TabNegociacion'
 
 const TABS = [
-  { id: 'detalle',     label: 'Detalles',    icon: FileText   },
-  { id: 'movimientos', label: 'Movimientos', icon: Clock      },
-  { id: 'audiencias',  label: 'Audiencias',  icon: Calendar   },
-  { id: 'honorarios',  label: 'Honorarios',  icon: DollarSign },
+  { id: 'detalle',       label: 'Detalles',        icon: FileText   },
+  { id: 'movimientos',   label: 'Movimientos',     icon: Clock      },
+  { id: 'audiencias',    label: 'Audiencias',      icon: Calendar   },
+  { id: 'honorarios',    label: 'Honorarios',      icon: DollarSign },
+  { id: 'notas',         label: 'Notas',           icon: StickyNote },
+  { id: 'instrucciones', label: 'Instrucciones',   icon: BookOpen   },
+  { id: 'negociacion',   label: 'Negociación',     icon: Handshake  },
 ]
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -45,7 +51,7 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-      <div className="bg-so-card border border-so-border rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div className="bg-so-card border border-so-border rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4 border-b border-so-border">
           <div className="flex-1 min-w-0">
@@ -61,13 +67,13 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-so-border px-6">
+        {/* Tabs — scrollable para que quepan todas */}
+        <div className="flex border-b border-so-border px-6 overflow-x-auto scrollbar-none">
           {TABS.map(t => {
             const Icon = t.icon
             return (
               <button key={t.id} onClick={() => setTab(t.id)}
-                className={cn('flex items-center gap-1.5 px-3 py-3 text-[11px] font-medium tracking-wide border-b-2 transition-colors',
+                className={cn('flex items-center gap-1.5 px-3 py-3 text-[11px] font-medium tracking-wide border-b-2 transition-colors whitespace-nowrap flex-shrink-0',
                   tab === t.id ? 'border-so-red text-so-text' : 'border-transparent text-so-muted hover:text-so-textMid')}>
                 <Icon size={12} />
                 {t.label}
@@ -143,6 +149,12 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
                   ))}
                 </ul>
           )}
+
+          {tab === 'notas' && <TabNotas casoId={caso.id} />}
+
+          {tab === 'instrucciones' && <TabInstrucciones casoId={caso.id} />}
+
+          {tab === 'negociacion' && <TabNegociacion casoId={caso.id} />}
 
           {tab === 'honorarios' && (
             loading
