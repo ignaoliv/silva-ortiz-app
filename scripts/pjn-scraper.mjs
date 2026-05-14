@@ -195,20 +195,68 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
     }
 
     if (dlBtn) {
-      // El PJN sirve el PDF como descarga del browser → usar waitForEvent('download')
-      const downloadPromise = page.waitForEvent('download', { timeout: 20000 }).catch(() => null)
-      await dlBtn.click()
-      const download = await downloadPromise
+      // Log href del botón para diagnóstico
+      const btnHref = await dlBtn.getAttribute('href').catch(() => null)
+      const btnOnclick = await dlBtn.getAttribute('onclick').catch(() => null)
+      console.log(`          href="${btnHref}" onclick="${btnOnclick?.substring(0,80)}"`)
+
+      // Estrategia 1: el botón abre PDF en nueva pestaña (popup)
+      const [popup, download] = await Promise.all([
+        page.waitForEvent('popup',    { timeout: 8000 }).catch(() => null),
+        page.waitForEvent('download', { timeout: 8000 }).catch(() => null),
+        dlBtn.click(),
+      ])
 
       if (download) {
         const tmpPath = await download.path()
         if (tmpPath) {
           pdfBuffer = await fsPromises.readFile(tmpPath)
           pdfUrl    = download.url()
-          console.log(`          📡 PDF descargado (${pdfBuffer.length} bytes)`)
+          console.log(`          📡 PDF via download event (${pdfBuffer.length} bytes)`)
         }
+      } else if (popup) {
+        console.log(`          🗔 PDF en nueva pestaña: ${popup.url()}`)
+        await popup.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+        // Capturar el PDF de la respuesta de la nueva pestaña
+        const pdfRes = await popup.waitForResponse(
+          r => r.headers()['content-type']?.includes('pdf') || r.url().includes('.pdf'),
+          { timeout: 5000 }
+        ).catch(() => null)
+        if (pdfRes?.ok()) {
+          pdfBuffer = await pdfRes.body()
+          pdfUrl    = pdfRes.url()
+          console.log(`          📡 PDF via popup (${pdfBuffer.length} bytes)`)
+        } else {
+          // Intentar navegar directamente a la URL del popup
+          pdfUrl = popup.url()
+          if (pdfUrl && pdfUrl !== 'about:blank') {
+            pdfBuffer = await popup.evaluate(async (url) => {
+              const r = await fetch(url, { credentials: 'include' })
+              if (!r.ok) return null
+              const buf = await r.arrayBuffer()
+              return Array.from(new Uint8Array(buf))
+            }, pdfUrl).catch(() => null)
+            if (pdfBuffer) pdfBuffer = Buffer.from(pdfBuffer)
+          }
+        }
+        await popup.close().catch(() => {})
       } else {
-        console.log(`          ⚠️  Download event no capturado`)
+        // Estrategia 2: el botón navega en la misma pestaña o tiene href directo
+        if (btnHref && btnHref !== '#' && !btnHref.startsWith('javascript')) {
+          const fullUrl = btnHref.startsWith('http') ? btnHref : new URL(btnHref, 'https://scw.pjn.gov.ar').href
+          console.log(`          🔗 Navegando directo: ${fullUrl}`)
+          const navRes = await page.goto(fullUrl, { waitUntil: 'commit', timeout: 15000 }).catch(() => null)
+          if (navRes?.ok()) {
+            const ct = navRes.headers()['content-type'] || ''
+            if (ct.includes('pdf') || ct.includes('octet-stream')) {
+              pdfBuffer = await navRes.body()
+              pdfUrl    = fullUrl
+              console.log(`          📡 PDF via navegación (${pdfBuffer.length} bytes)`)
+            }
+          }
+        } else {
+          console.log(`          ⚠️  Sin popup ni download — href inválido`)
+        }
       }
     } else {
       console.log(`          ⚠️  Sin botón Descargar en el viewer`)
