@@ -143,8 +143,8 @@ async function encontrarItemsPanel(page) {
         )
         .join(' ').trim().substring(0, 900)
 
-      // Guardar un selector único para poder hacer click desde Playwright
-      const id = el.id ? `#${el.id}` : null
+      // Guardar el id del elemento para poder hacer click desde Playwright
+      const id = el.id || null  // sin #, se agrega al usarlo
       return { fecha, tipo, descripcion: desc, fojas, domIdx: idx, domId: id }
     }).filter(Boolean)
   })
