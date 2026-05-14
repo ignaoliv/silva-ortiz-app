@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Save, Loader2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Save, Loader2, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react'
 import { fmtDateLarga } from '@/lib/utils'
 
 export default function TabInstrucciones({ casoId }: { casoId: number }) {
@@ -9,7 +9,8 @@ export default function TabInstrucciones({ casoId }: { casoId: number }) {
   const [fechaMod,  setFechaMod]  = useState<string | null>(null)
   const [loading,   setLoading]   = useState(true)
   const [saving,    setSaving]    = useState(false)
-  const [saved,     setSaved]     = useState(false)
+  const [status,    setStatus]    = useState<'idle' | 'ok' | 'error'>('idle')
+  const [errMsg,    setErrMsg]    = useState('')
   const original = useRef('')
 
   useEffect(() => {
@@ -26,16 +27,26 @@ export default function TabInstrucciones({ casoId }: { casoId: number }) {
 
   async function guardar() {
     setSaving(true)
-    setSaved(false)
-    await fetch(`/api/casos/${casoId}/instrucciones`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contenido }),
-    })
-    original.current = contenido
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    setStatus('idle')
+    try {
+      const res = await fetch(`/api/casos/${casoId}/instrucciones`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contenido }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? `Error ${res.status}`)
+      }
+      original.current = contenido
+      setStatus('ok')
+      setTimeout(() => setStatus('idle'), 3000)
+    } catch (e: unknown) {
+      setErrMsg(e instanceof Error ? e.message : 'No se pudo guardar')
+      setStatus('error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const dirty = contenido !== original.current
@@ -67,14 +78,21 @@ export default function TabInstrucciones({ casoId }: { casoId: number }) {
           disabled={!dirty || saving}
           className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-widest uppercase transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-so-ash text-white hover:bg-so-ashLight"
         >
-          {saving ? <Loader2 size={11} className="animate-spin" />
-           : saved  ? <CheckCircle size={11} />
+          {saving               ? <Loader2    size={11} className="animate-spin" />
+           : status === 'ok'    ? <CheckCircle size={11} />
+           : status === 'error' ? <AlertCircle size={11} />
            : <Save size={11} />}
-          {saved ? 'Guardado' : 'Guardar'}
+          {status === 'ok' ? 'Guardado' : status === 'error' ? 'Error' : 'Guardar'}
         </button>
       </div>
 
-      {/* Aviso */}
+      {status === 'error' && (
+        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 px-3 py-2">
+          <AlertCircle size={12} className="text-red-400 flex-shrink-0" />
+          <p className="text-[11px] text-red-400">{errMsg}</p>
+        </div>
+      )}
+
       <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/20 px-3 py-2.5">
         <AlertTriangle size={12} className="text-amber-400 mt-0.5 flex-shrink-0" />
         <p className="text-[10px] text-amber-300 leading-relaxed">
@@ -85,7 +103,7 @@ export default function TabInstrucciones({ casoId }: { casoId: number }) {
 
       <textarea
         value={contenido}
-        onChange={e => setContenido(e.target.value)}
+        onChange={e => { setContenido(e.target.value); setStatus('idle') }}
         placeholder="Ej: El cliente autoriza transacción hasta $2.000.000 con pago en una sola cuota. No acepta acuerdos con cláusula de confidencialidad..."
         rows={12}
         className="w-full bg-so-surface border border-so-border text-sm text-so-text placeholder:text-so-muted/50 resize-none p-4 focus:outline-none focus:border-so-ash transition-colors leading-relaxed"

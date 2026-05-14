@@ -9,8 +9,13 @@ export async function POST(req: Request, { params }: Params) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  const { tipo, monto, descripcion } = await req.json()
-  if (!tipo) return NextResponse.json({ error: 'tipo requerido' }, { status: 400 })
-  await addOfertaHistorial(parseInt(id), tipo, monto ?? null, descripcion ?? null)
-  return NextResponse.json({ ok: true })
+  try {
+    const { tipo, monto, descripcion } = await req.json()
+    if (!tipo) return NextResponse.json({ error: 'tipo requerido' }, { status: 400 })
+    await addOfertaHistorial(parseInt(id), tipo, monto ?? null, descripcion ?? null)
+    return NextResponse.json({ ok: true })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Error al registrar oferta'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

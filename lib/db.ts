@@ -45,3 +45,16 @@ export async function query<T = Record<string, unknown>>(
     return null
   }
 }
+
+/** Como query() pero lanza en vez de retornar null — usar para escrituras (INSERT/UPDATE/MERGE) */
+export async function execute(q: string): Promise<void> {
+  const pool = await getPool()
+  if (!pool) throw new Error('Sin conexión a la base de datos')
+  try {
+    await pool.request().query(q)
+  } catch (err) {
+    const msg = (err as Error).message
+    console.error('[DB] Execute error:', msg)
+    throw new Error(msg)
+  }
+}

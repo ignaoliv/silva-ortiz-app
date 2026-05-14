@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Plus, TrendingUp, TrendingDown, Minus, CheckCircle, XCircle } from 'lucide-react'
+import { Loader2, Plus, TrendingUp, TrendingDown, Minus, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import type { DBNegociacion, DBOfertaHistorial } from '@/lib/queries'
 import { fmtMoney, fmtDateLarga } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -9,10 +9,10 @@ import { cn } from '@/lib/utils'
 const ESTADOS = ['Sin iniciar', 'En curso', 'Pausada', 'Acuerdo', 'Fracasó']
 
 const TIPO_OPTS = [
-  { value: 'Oferta',       label: 'Nueva oferta nuestra',    color: 'text-blue-400'    },
-  { value: 'Contraoferta', label: 'Contraoferta recibida',   color: 'text-amber-400'   },
-  { value: 'Acuerdo',      label: 'Acuerdo alcanzado',       color: 'text-emerald-400' },
-  { value: 'Rechazo',      label: 'Oferta rechazada',        color: 'text-red-400'     },
+  { value: 'Oferta',       label: 'Nueva oferta nuestra',  },
+  { value: 'Contraoferta', label: 'Contraoferta recibida', },
+  { value: 'Acuerdo',      label: 'Acuerdo alcanzado',     },
+  { value: 'Rechazo',      label: 'Oferta rechazada',      },
 ]
 
 function tipoIcon(tipo: string) {
@@ -32,10 +32,10 @@ function tipoColor(tipo: string) {
 }
 
 function estadoBadge(estado: string) {
-  if (estado === 'Acuerdo')    return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-  if (estado === 'Fracasó')    return 'bg-red-500/15 text-red-400 border border-red-500/30'
-  if (estado === 'En curso')   return 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-  if (estado === 'Pausada')    return 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+  if (estado === 'Acuerdo')  return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+  if (estado === 'Fracasó')  return 'bg-red-500/15 text-red-400 border border-red-500/30'
+  if (estado === 'En curso') return 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+  if (estado === 'Pausada')  return 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
   return 'bg-so-surface text-so-muted border border-so-border'
 }
 
@@ -44,10 +44,10 @@ function parseMonto(s: string): number | null {
   return isNaN(n) ? null : n
 }
 
-// ── KPI card ─────────────────────────────────────────────────────────────────
-function KPI({
-  label, value, sub, accent,
-}: { label: string; value: string; sub?: string; accent?: string }) {
+// ── KPI card ──────────────────────────────────────────────────────────────────
+function KPI({ label, value, sub, accent }: {
+  label: string; value: string; sub?: string; accent?: string
+}) {
   return (
     <div className="border border-so-border bg-so-surface p-4">
       <p className="text-[9px] font-bold tracking-[0.18em] uppercase text-so-muted mb-2">{label}</p>
@@ -58,26 +58,33 @@ function KPI({
 }
 
 // ── Formulario nueva oferta ───────────────────────────────────────────────────
-function FormOferta({
-  casoId,
-  onDone,
-}: { casoId: number; onDone: () => void }) {
+function FormOferta({ casoId, onDone }: { casoId: number; onDone: () => void }) {
   const [tipo,        setTipo]        = useState('Oferta')
   const [montoStr,    setMontoStr]    = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const monto = parseMonto(montoStr)
-    await fetch(`/api/casos/${casoId}/negociacion/oferta`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo, monto, descripcion }),
-    })
-    setSaving(false)
-    onDone()
+    setError(null)
+    try {
+      const monto = parseMonto(montoStr)
+      const res = await fetch(`/api/casos/${casoId}/negociacion/oferta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo, monto, descripcion }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? `Error ${res.status}`)
+      }
+      onDone()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'No se pudo registrar')
+      setSaving(false)
+    }
   }
 
   return (
@@ -85,6 +92,13 @@ function FormOferta({
       <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-so-muted">
         Registrar movimiento
       </p>
+
+      {error && (
+        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 px-3 py-2">
+          <AlertCircle size={12} className="text-red-400 flex-shrink-0" />
+          <p className="text-[11px] text-red-400">{error}</p>
+        </div>
+      )}
 
       {/* Tipo */}
       <div className="grid grid-cols-2 gap-2">
@@ -137,7 +151,11 @@ function FormOferta({
       </div>
 
       <div className="flex gap-2 justify-end">
-        <button type="button" onClick={onDone} className="px-3 py-1.5 text-[10px] text-so-muted hover:text-so-text transition-colors">
+        <button
+          type="button"
+          onClick={onDone}
+          className="px-3 py-1.5 text-[10px] text-so-muted hover:text-so-text transition-colors"
+        >
           Cancelar
         </button>
         <button
@@ -155,46 +173,62 @@ function FormOferta({
 
 // ── Panel principal ───────────────────────────────────────────────────────────
 export default function TabNegociacion({ casoId }: { casoId: number }) {
-  const [data,      setData]      = useState<DBNegociacion | null>(null)
-  const [loading,   setLoading]   = useState(true)
-  const [showForm,  setShowForm]  = useState(false)
-  const [editando,  setEditando]  = useState(false)
-  const [estado,    setEstado]    = useState('')
-  const [notasNeg,  setNotasNeg]  = useState('')
-  const [maxStr,    setMaxStr]    = useState('')
-  const [saving,    setSaving]    = useState(false)
-  const [saved,     setSaved]     = useState(false)
+  const [data,     setData]     = useState<DBNegociacion | null>(null)
+  const [loading,  setLoading]  = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editando, setEditando] = useState(false)
+  const [estado,   setEstado]   = useState('')
+  const [notasNeg, setNotasNeg] = useState('')
+  const [maxStr,   setMaxStr]   = useState('')
+  const [saving,   setSaving]   = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [saveErr,  setSaveErr]  = useState('')
 
   async function load() {
     setLoading(true)
-    const d: DBNegociacion = await fetch(`/api/casos/${casoId}/negociacion`).then(r => r.json())
-    setData(d)
-    setEstado(d.estado)
-    setNotasNeg(d.notas ?? '')
-    setMaxStr(d.montoMaxCliente != null ? String(d.montoMaxCliente) : '')
-    setLoading(false)
+    try {
+      const d: DBNegociacion = await fetch(`/api/casos/${casoId}/negociacion`).then(r => r.json())
+      setData(d)
+      setEstado(d.estado)
+      setNotasNeg(d.notas ?? '')
+      setMaxStr(d.montoMaxCliente != null ? String(d.montoMaxCliente) : '')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [casoId])
 
   async function guardar() {
     setSaving(true)
-    await fetch(`/api/casos/${casoId}/negociacion`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        estado,
-        notas:           notasNeg || null,
-        montoMaxCliente: parseMonto(maxStr),
-        montoOfrecido:   data?.montoOfrecido ?? null,
-        contraoferta:    data?.contraoferta  ?? null,
-      }),
-    })
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-    setEditando(false)
-    load()
+    setSaveStatus('idle')
+    setSaveErr('')
+    try {
+      const res = await fetch(`/api/casos/${casoId}/negociacion`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          estado,
+          notas:           notasNeg || null,
+          montoMaxCliente: parseMonto(maxStr),
+          montoOfrecido:   data?.montoOfrecido ?? null,
+          contraoferta:    data?.contraoferta  ?? null,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? `Error ${res.status}`)
+      }
+      setSaveStatus('ok')
+      setEditando(false)
+      await load()
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } catch (e: unknown) {
+      setSaveErr(e instanceof Error ? e.message : 'No se pudo guardar')
+      setSaveStatus('error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) {
@@ -208,12 +242,11 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
 
   if (!data) return <p className="text-xs text-so-muted py-8 text-center">Error al cargar</p>
 
-  // Diferencia: oferta nuestra vs contraoferta
   const diferencia = data.montoOfrecido != null && data.contraoferta != null
     ? data.montoOfrecido - data.contraoferta
     : null
 
-  const histActual = [...data.historial].reverse() // cronológico
+  const histOrden = [...data.historial].reverse()
 
   return (
     <div className="space-y-5">
@@ -224,7 +257,6 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
           label="Máximo del cliente"
           value={data.montoMaxCliente != null ? fmtMoney(data.montoMaxCliente) : '—'}
           sub="Límite autorizado"
-          accent="text-so-text"
         />
         <KPI
           label="Última oferta nuestra"
@@ -260,7 +292,7 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
             </span>
           </div>
           <button
-            onClick={() => setEditando(v => !v)}
+            onClick={() => { setEditando(v => !v); setSaveStatus('idle') }}
             className="text-[10px] tracking-widest uppercase text-so-muted hover:text-so-ash transition-colors"
           >
             {editando ? 'Cancelar' : 'Editar'}
@@ -269,6 +301,12 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
 
         {editando && (
           <div className="space-y-3 border-t border-so-border pt-3">
+            {saveStatus === 'error' && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 px-3 py-2">
+                <AlertCircle size={12} className="text-red-400 flex-shrink-0" />
+                <p className="text-[11px] text-red-400">{saveErr}</p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] tracking-widest uppercase text-so-muted block mb-1">
@@ -306,14 +344,19 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
                 className="w-full bg-so-bg border border-so-border text-sm text-so-text px-3 py-2 focus:outline-none focus:border-so-ash resize-none"
               />
             </div>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-3">
+              {saveStatus === 'ok' && (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                  <CheckCircle size={11} /> Guardado
+                </span>
+              )}
               <button
                 onClick={guardar}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold tracking-widest uppercase bg-so-ash text-white hover:bg-so-ashLight disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold tracking-widest uppercase bg-so-ash text-white hover:bg-so-ashLight disabled:opacity-50 transition-colors"
               >
-                {saving ? <Loader2 size={10} className="animate-spin" /> : null}
-                {saved ? '¡Guardado!' : 'Guardar'}
+                {saving && <Loader2 size={10} className="animate-spin" />}
+                Guardar
               </button>
             </div>
           </div>
@@ -337,7 +380,7 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
             className="flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase text-so-ash hover:text-so-ashLight transition-colors"
           >
             <Plus size={12} />
-            Registrar movimiento
+            {showForm ? 'Cancelar' : 'Registrar movimiento'}
           </button>
         </div>
 
@@ -350,30 +393,23 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
           </div>
         )}
 
-        {histActual.length === 0 ? (
+        {histOrden.length === 0 ? (
           <p className="text-xs text-so-muted text-center py-6 border border-dashed border-so-border">
             Sin movimientos registrados aún.
           </p>
         ) : (
           <div className="relative">
-            {/* línea vertical */}
             <div className="absolute left-[15px] top-0 bottom-0 w-px bg-so-border" />
-
             <div className="space-y-3">
-              {histActual.map((h: DBOfertaHistorial, i: number) => (
+              {histOrden.map((h: DBOfertaHistorial, i: number) => (
                 <div key={h.id ?? i} className="flex gap-4 items-start">
-                  {/* dot */}
                   <div className={cn(
                     'relative z-10 w-[30px] h-[30px] flex-shrink-0 flex items-center justify-center border rounded-full bg-so-card',
                     tipoColor(h.tipo)
                   )}>
                     {tipoIcon(h.tipo)}
                   </div>
-
-                  <div className={cn(
-                    'flex-1 border p-3 rounded-none',
-                    tipoColor(h.tipo)
-                  )}>
+                  <div className={cn('flex-1 border p-3', tipoColor(h.tipo))}>
                     <div className="flex items-baseline justify-between gap-2 mb-0.5">
                       <span className="text-[10px] font-bold tracking-widest uppercase text-so-muted">
                         {h.tipo}
@@ -383,9 +419,7 @@ export default function TabNegociacion({ casoId }: { casoId: number }) {
                       </span>
                     </div>
                     {h.monto != null && (
-                      <p className="text-sm font-semibold text-so-text">
-                        {fmtMoney(h.monto)}
-                      </p>
+                      <p className="text-sm font-semibold text-so-text">{fmtMoney(h.monto)}</p>
                     )}
                     {h.descripcion && (
                       <p className="text-xs text-so-textMid mt-0.5">{h.descripcion}</p>

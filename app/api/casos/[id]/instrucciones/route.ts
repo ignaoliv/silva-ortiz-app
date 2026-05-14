@@ -17,7 +17,12 @@ export async function PUT(req: Request, { params }: Params) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  const { contenido } = await req.json()
-  await upsertInstrucciones(parseInt(id), contenido ?? '')
-  return NextResponse.json({ ok: true })
+  try {
+    const { contenido } = await req.json()
+    await upsertInstrucciones(parseInt(id), contenido ?? '')
+    return NextResponse.json({ ok: true })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Error al guardar instrucciones'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }
