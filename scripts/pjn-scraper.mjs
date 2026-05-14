@@ -43,7 +43,8 @@ async function getBlobContainer() {
   if (!AZURE_STORAGE_CONN_STR) return null
   const client   = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONN_STR)
   blobContainer  = client.getContainerClient(BLOB_CONTAINER)
-  await blobContainer.createIfNotExists({ access: 'blob' })
+  // Sin acceso público — usamos SAS URLs
+  await blobContainer.createIfNotExists()
   return blobContainer
 }
 
@@ -53,7 +54,14 @@ async function subirPDF(buffer, nombre) {
   const blobName  = nombre.replace(/[^a-zA-Z0-9._-]/g, '_')
   const blob      = container.getBlockBlobClient(blobName)
   await blob.uploadData(buffer, { blobHTTPHeaders: { blobContentType: 'application/pdf' } })
-  return blob.url
+  // Generar SAS URL válida por 2 años
+  const expiry = new Date()
+  expiry.setFullYear(expiry.getFullYear() + 2)
+  const sasUrl = await blob.generateSasUrl({
+    permissions: { read: true },
+    expiresOn:   expiry,
+  })
+  return sasUrl
 }
 
 // ── Crypto ────────────────────────────────────────────────────────
@@ -190,8 +198,16 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
 
     let dlBtn = null
     for (const sel of dlSelectors) {
-      dlBtn = await page.$(sel)
-      if (dlBtn) { console.log(`          🔘 Botón encontrado: ${sel}`); break }
+      const candidates = await page.$$(sel)
+      // Filtrar: excluir links que apunten a dominios externos (ej: chrome download banner)
+      for (const el of candidates) {
+        const href = await el.getAttribute('href').catch(() => '')
+        if (href && (href.includes('google.com') || href.includes('chrome') || href.includes('mozilla'))) continue
+        dlBtn = el
+        console.log(`          🔘 Botón encontrado: ${sel} (href: ${href?.substring(0, 60)})`)
+        break
+      }
+      if (dlBtn) break
     }
 
     if (dlBtn) {
