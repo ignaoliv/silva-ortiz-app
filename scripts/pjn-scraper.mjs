@@ -151,7 +151,7 @@ async function encontrarItemsPanel(page) {
 }
 
 // ── Descargar PDF que se carga en el panel derecho al clickear una fila ─
-async function descargarDocumentoActuacion(page, itemSelector, nroExp, fecha, idx) {
+async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
   try {
     let pdfBuffer = null
     let pdfUrl    = null
@@ -173,12 +173,14 @@ async function descargarDocumentoActuacion(page, itemSelector, nroExp, fecha, id
       { timeout: 10000 }
     ).catch(() => null)
 
-    // Click en la fila
-    await page.evaluate(({ sel, domIdx }) => {
+    // Click en la fila (JSF usa IDs con ":" que rompen querySelector → usar getElementById)
+    await page.evaluate(({ domId, domIdx }) => {
       let el
-      if (sel) {
-        el = document.querySelector(sel)
-      } else {
+      if (domId) {
+        // getElementById no necesita escapar caracteres especiales
+        el = document.getElementById(domId)
+      }
+      if (!el) {
         const todos = [...document.querySelectorAll('div, td, li, tr, span')].filter(e =>
           /\d{2}\/\d{2}\/\d{4}/.test(e.textContent || '') &&
           (e.textContent || '').length < 2000 &&
@@ -187,7 +189,7 @@ async function descargarDocumentoActuacion(page, itemSelector, nroExp, fecha, id
         el = todos[domIdx]
       }
       if (el) el.click()
-    }, { sel: itemSelector, domIdx: idx })
+    }, { domId: item.domId, domIdx: idx })
 
     const response = await responsePromise
     page.off('request', onReq)
@@ -306,15 +308,15 @@ async function extraerActuacionesLibroDigital(page, nroExp) {
 
       const urlBlob = await descargarDocumentoActuacion(
         page,
-        item.domId ? `#${item.domId}` : null,
+        item,
         nroExp.replace(/\s/g, '_'),
         item.fecha,
         i
       )
       todas.push({ ...item, urlBlob })
 
-      // Pequeña pausa entre clicks para no saturar el server
-      await page.waitForTimeout(1000)
+      // Pausa entre clicks para no romper la sesión JSF
+      await page.waitForTimeout(2000)
     }
 
     // Paginación
