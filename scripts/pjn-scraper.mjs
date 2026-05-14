@@ -9,7 +9,7 @@ import { readFileSync, promises as fsPromises } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import crypto from 'crypto'
-import { BlobServiceClient } from '@azure/storage-blob'
+import { BlobServiceClient, BlobSASPermissions } from '@azure/storage-blob'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 
@@ -58,7 +58,7 @@ async function subirPDF(buffer, nombre) {
   const expiry = new Date()
   expiry.setFullYear(expiry.getFullYear() + 2)
   const sasUrl = await blob.generateSasUrl({
-    permissions: { read: true },
+    permissions: BlobSASPermissions.parse('r'),
     expiresOn:   expiry,
   })
   return sasUrl
@@ -144,24 +144,30 @@ async function extraerActuacionesExpediente(page, nroExp) {
   console.log(`      🗂️  Tabla action-table encontrada: ${tblFound}`)
 
   // Leer todas las páginas de la tabla de actuaciones
-  // Estructura: expediente:expedienteTab > expediente:actuaciones > expediente:actuacionTab > expediente:action-table
-  // Paginación: expediente:j_idt217:divPagesAct
+  // Columnas: 0=botón-descarga | 1=OFICINA | 2=FECHA | 3=TIPO | 4=DESCRIPCION | 5=FOJAS
+  // Cada celda tiene <span class="sr-only">Label: </span><span class="font-color-black">valor</span>
   function leerFilasActuaciones() {
     return page.evaluate(() => {
+      function celda(td) {
+        if (!td) return ''
+        // Preferir el span con valor real (font-color-black) si existe
+        const span = td.querySelector('.font-color-black')
+        return (span ? span.textContent : td.textContent).trim()
+      }
       const tbl = document.getElementById('expediente:action-table')
       if (!tbl) return []
       return [...tbl.querySelectorAll('tbody tr')].map(tr => {
-        const cells   = [...tr.querySelectorAll('td')]
-        const dlLink  = tr.querySelector('a[href*="download=true"]')
-        const dlHref  = dlLink?.getAttribute('href') || null
-        const fechaCell = cells.find(td => /^\d{2}\/\d{2}\/\d{4}$/.test(td.textContent.trim()))
-        if (!fechaCell) return null
-        const fi = cells.indexOf(fechaCell)
+        const cells  = [...tr.querySelectorAll('td')]
+        if (cells.length < 5) return null
+        const dlLink = tr.querySelector('a[href*="download=true"]')
+        const dlHref = dlLink?.getAttribute('href') || null
+        const fecha  = celda(cells[2])
+        if (!fecha || !/\d{2}\/\d{2}\/\d{4}/.test(fecha)) return null
         return {
-          fecha:       fechaCell.textContent.trim(),
-          tipo:        cells[fi + 1]?.textContent.trim().substring(0, 99)  || '',
-          descripcion: cells[fi + 2]?.textContent.trim().substring(0, 999) || '',
-          fojas:       cells[fi + 3]?.textContent.trim().substring(0, 49)  || '',
+          fecha,
+          tipo:        celda(cells[3]).substring(0, 99),
+          descripcion: celda(cells[4]).substring(0, 999),
+          fojas:       celda(cells[5]).substring(0, 49),
           dlHref,
         }
       }).filter(Boolean)
@@ -173,10 +179,11 @@ async function extraerActuacionesExpediente(page, nroExp) {
   while (true) {
     const batch = await leerFilasActuaciones()
     items.push(...batch)
-    // Paginación: buscar botón siguiente en expediente:j_idt217:divPagesAct
-    const nextBtn = await page.$('[id*="divPagesAct"] a[id*="next"], [id*="divPagesAct"] .rf-ds-btn-next:not(.rf-ds-dis), [id*="divPagesAct"] a:not(.disabled):last-child')
-    if (!nextBtn || actPag >= 30) break
-    await nextBtn.click()
+    // Paginación: botón siguiente en divPagesAct — usar locator (no ElementHandle)
+    const nextLocator = page.locator('[id*="divPagesAct"] a[id*="next"]:not([class*="dis"]), [id*="divPagesAct"] span[id*="next"]:not([class*="dis"])')
+    const hasNext = await nextLocator.count() > 0
+    if (!hasNext || actPag >= 30) break
+    await nextLocator.first().click()
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
     await page.waitForTimeout(500)
     actPag++
