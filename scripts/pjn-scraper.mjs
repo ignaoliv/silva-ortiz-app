@@ -135,63 +135,56 @@ async function descargarPorHref(page, href, nroExp, fecha, idx) {
 // Tabla: id="expediente:action-table"
 // Botón descarga: <a href="/scw/viewer.seam?id=...&download=true" target="_blank">
 async function extraerActuacionesExpediente(page, nroExp) {
-  // Click en el tab "Actuaciones"
-  // RichFaces tabPanel: headers en rf-tbp-itm / rf-tab-hdr FUERA del div expediente:actuaciones
-  const clicked = await page.locator([
-    '.rf-tbp-itm:has-text("Actuaciones")',
-    '.rf-tab-hdr:has-text("Actuaciones")',
-    '.rf-tbp-hdr *:has-text("Actuaciones")',
-    '.nav-tabs a:has-text("Actuaciones")',
-    '[role="tab"]:has-text("Actuaciones")',
-  ].join(', ')).first().click({ timeout: 5000 }).then(() => true).catch(() => false)
-
-  if (!clicked) {
-    // Fallback: elemento con texto exacto "Actuaciones" con cursor pointer
-    await page.evaluate(() => {
-      const el = [...document.querySelectorAll('div,span,a,td,li')]
-        .find(e => e.textContent.trim() === 'Actuaciones' && e.children.length <= 1)
-      if (el) el.click()
-    })
-  }
-
-  // Esperar a que la tabla cargue (AJAX lazy-load del tab)
+  // Actuaciones ES el tab por defecto en expediente.seam (value="actuaciones")
+  // La tabla ya está en el DOM — solo esperamos que esté lista
   await page.waitForSelector('[id="expediente:action-table"]', { timeout: 15000 }).catch(() => {})
   await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
 
-  // Log para debug
   const tblFound = await page.evaluate(() => !!document.getElementById('expediente:action-table'))
-  console.log(`      🗂️  Tab Actuaciones — tabla encontrada: ${tblFound}`)
+  console.log(`      🗂️  Tabla action-table encontrada: ${tblFound}`)
 
-  // Leer tabla de actuaciones
-  const items = await page.evaluate(() => {
-    const tbl = document.getElementById('expediente:action-table')
-    if (!tbl) return []
+  // Leer todas las páginas de la tabla de actuaciones
+  // Estructura: expediente:expedienteTab > expediente:actuaciones > expediente:actuacionTab > expediente:action-table
+  // Paginación: expediente:j_idt217:divPagesAct
+  function leerFilasActuaciones() {
+    return page.evaluate(() => {
+      const tbl = document.getElementById('expediente:action-table')
+      if (!tbl) return []
+      return [...tbl.querySelectorAll('tbody tr')].map(tr => {
+        const cells   = [...tr.querySelectorAll('td')]
+        const dlLink  = tr.querySelector('a[href*="download=true"]')
+        const dlHref  = dlLink?.getAttribute('href') || null
+        const fechaCell = cells.find(td => /^\d{2}\/\d{2}\/\d{4}$/.test(td.textContent.trim()))
+        if (!fechaCell) return null
+        const fi = cells.indexOf(fechaCell)
+        return {
+          fecha:       fechaCell.textContent.trim(),
+          tipo:        cells[fi + 1]?.textContent.trim().substring(0, 99)  || '',
+          descripcion: cells[fi + 2]?.textContent.trim().substring(0, 999) || '',
+          fojas:       cells[fi + 3]?.textContent.trim().substring(0, 49)  || '',
+          dlHref,
+        }
+      }).filter(Boolean)
+    })
+  }
 
-    return [...tbl.querySelectorAll('tbody tr')].map(tr => {
-      const cells = [...tr.querySelectorAll('td')]
+  const items = []
+  let actPag = 1
+  while (true) {
+    const batch = await leerFilasActuaciones()
+    items.push(...batch)
+    // Paginación: buscar botón siguiente en expediente:j_idt217:divPagesAct
+    const nextBtn = await page.$('[id*="divPagesAct"] a[id*="next"], [id*="divPagesAct"] .rf-ds-btn-next:not(.rf-ds-dis), [id*="divPagesAct"] a:not(.disabled):last-child')
+    if (!nextBtn || actPag >= 30) break
+    await nextBtn.click()
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+    await page.waitForTimeout(500)
+    actPag++
+  }
 
-      // Celda de acciones: primera celda, contiene <a href="...download=true">
-      const dlLink  = tr.querySelector('a[href*="download=true"]')
-      const dlHref  = dlLink?.getAttribute('href') || null
-
-      // Celda con fecha DD/MM/YYYY
-      const fechaCell = cells.find(td => /^\d{2}\/\d{2}\/\d{4}$/.test(td.textContent.trim()))
-      if (!fechaCell) return null
-      const fi = cells.indexOf(fechaCell)
-
-      return {
-        fecha:       fechaCell.textContent.trim(),
-        tipo:        cells[fi + 1]?.textContent.trim().substring(0, 99)  || '',
-        descripcion: cells[fi + 2]?.textContent.trim().substring(0, 999) || '',
-        fojas:       cells[fi + 3]?.textContent.trim().substring(0, 49)  || '',
-        dlHref,
-      }
-    }).filter(Boolean)
-  })
-
-  console.log(`      📊 ${items.length} actuaciones encontradas`)
+  console.log(`      📊 ${items.length} actuaciones en ${actPag} página(s)`)
   if (items.length === 0) {
-    const txt = await page.evaluate(() => document.body.innerText.substring(0, 400))
+    const txt = await page.evaluate(() => document.body.innerText.substring(0, 300))
     console.log(`      📄 Body: ${txt}`)
   }
 
