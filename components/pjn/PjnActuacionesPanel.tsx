@@ -2,37 +2,36 @@
 
 import { useEffect, useState } from 'react'
 import type { DBPjnActuacion } from '@/lib/queries'
-import { FileText, Download, Loader2, Eye, X } from 'lucide-react'
+import { Download, Loader2, Eye, X, FileText } from 'lucide-react'
 
 interface Props {
   idExpediente: number
 }
 
-// Mapeo por keyword del tipo completo (ej: "ESCRITO AGREGADO", "FIRMA DESPACHO", etc.)
 function tipoColor(tipo: string) {
   const t = tipo.trim().toUpperCase()
-  if (t.includes('ESCRITO') || t === 'E')                                    return 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-  if (t.includes('DESPACHO') || t.includes('FIRMA') || t === 'D')            return 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-  if (t.includes('CEDULA') || t === 'C')                                     return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-  if (t.includes('OFICIO') || t === 'O')                                     return 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-  if (t.includes('SENTENCIA') || t.includes('PUBLICACION') || t === 'P')     return 'bg-pink-500/10 text-pink-400 border-pink-500/20'
-  if (t.includes('MOVIMIENTO'))                                               return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-  return 'bg-so-surface text-so-muted border-so-border'
+  if (t.includes('ESCRITO') || t === 'E')                                return 'text-blue-400'
+  if (t.includes('DESPACHO') || t.includes('FIRMA') || t === 'D')       return 'text-so-ash'
+  if (t.includes('CEDULA') || t === 'C')                                 return 'text-emerald-400'
+  if (t.includes('OFICIO') || t === 'O')                                 return 'text-orange-400'
+  if (t.includes('SENTENCIA') || t.includes('PUBLICACION') || t === 'P') return 'text-pink-400'
+  if (t.includes('MOVIMIENTO'))                                           return 'text-so-muted'
+  return 'text-so-muted'
 }
 
 function tipoLabel(tipo: string) {
   const t = tipo.trim().toUpperCase()
-  if (t.includes('ESCRITO'))                                return 'ES'
-  if (t.includes('DESPACHO'))                               return 'DE'
-  if (t.includes('CEDULA'))                                 return 'CE'
-  if (t.includes('OFICIO'))                                 return 'OF'
-  if (t.includes('SENTENCIA') || t.includes('PUBLICACION')) return 'SE'
-  if (t.includes('MOVIMIENTO'))                             return 'MV'
-  if (t.includes('FIRMA'))                                  return 'FI'
-  return t.charAt(0)
+  if (t.includes('ESCRITO'))                                 return 'Escrito'
+  if (t.includes('FIRMA DESPACHO') || t.includes('DESPACHO')) return 'Despacho'
+  if (t.includes('CEDULA'))                                  return 'Cédula'
+  if (t.includes('OFICIO'))                                  return 'Oficio'
+  if (t.includes('SENTENCIA') || t.includes('PUBLICACION'))  return 'Sentencia'
+  if (t.includes('MOVIMIENTO'))                              return 'Movimiento'
+  if (t.includes('FIRMA'))                                   return 'Firma'
+  if (t.length <= 2)                                         return tipo.trim()
+  return tipo.trim()
 }
 
-// YYYY-MM-DD → DD/MM/AAAA
 function formatFecha(iso: string) {
   const parts = iso.split('-')
   if (parts.length !== 3) return iso
@@ -40,7 +39,6 @@ function formatFecha(iso: string) {
   return `${d}/${m}/${y}`
 }
 
-// Parsear detalle: "TÍTULO [Presentado DD/MM/AAAA HH:MM] descripción..."
 function parseDetalle(detalle: string) {
   const match = detalle.match(/^([\s\S]*?)\[Presentado\s+(\d{2}\/\d{2}\/\d{4}[^\]]*)\]\s*([\s\S]*)$/)
   if (!match) return { titulo: detalle, fechaPresentacion: null, descripcion: null }
@@ -51,52 +49,50 @@ function parseDetalle(detalle: string) {
   }
 }
 
-// ── Modal visor de PDF ────────────────────────────────────────────
+// ── Visor PDF fullscreen ──────────────────────────────────────────
 function PdfModal({ url, titulo, onClose }: { url: string; titulo: string; onClose: () => void }) {
-  // Cerrar con Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex flex-col bg-black/90"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      {/* Barra superior */}
-      <div className="flex items-center justify-between px-5 py-3 bg-so-card border-b border-so-border flex-shrink-0">
-        <p className="text-xs font-medium text-so-text truncate max-w-[60vw]">{titulo}</p>
-        <div className="flex items-center gap-3">
+      {/* Barra */}
+      <div className="flex items-center justify-between px-6 py-3 bg-so-surface border-b border-so-border flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="w-px h-5 bg-so-ash" />
+          <p className="text-xs font-heading font-semibold text-so-text tracking-wide truncate max-w-[55vw]">
+            {titulo}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
           <a
             href={url}
             download
-            className="flex items-center gap-1.5 text-xs text-so-red hover:text-so-redLight transition-colors font-medium"
+            className="group flex items-center gap-2 text-[10px] font-bold tracking-[0.15em] uppercase text-so-ash hover:text-white transition-colors"
           >
-            <Download size={13} />
+            <Download size={12} />
             Descargar
           </a>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-so-muted hover:text-so-text hover:bg-so-surface transition-colors"
+            className="p-1.5 text-so-muted hover:text-so-text transition-colors"
           >
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
       </div>
-
-      {/* Iframe PDF */}
-      <iframe
-        src={url}
-        className="flex-1 w-full bg-white"
-        title={titulo}
-      />
+      <iframe src={url} className="flex-1 w-full bg-white" title={titulo} />
     </div>
   )
 }
 
-// ── Panel principal ───────────────────────────────────────────────
+// ── Panel ─────────────────────────────────────────────────────────
 export default function PjnActuacionesPanel({ idExpediente }: Props) {
   const [actuaciones, setActuaciones] = useState<DBPjnActuacion[]>([])
   const [loading, setLoading]         = useState(true)
@@ -112,18 +108,18 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8 gap-2 text-so-muted">
-        <Loader2 size={14} className="animate-spin" />
-        <span className="text-xs">Cargando actuaciones...</span>
+      <div className="flex items-center justify-center py-10 gap-2 text-so-muted">
+        <Loader2 size={13} className="animate-spin" />
+        <span className="text-[11px] tracking-widest uppercase">Cargando actuaciones</span>
       </div>
     )
   }
 
-  if (error) return <p className="text-xs text-red-400 px-5 py-4">{error}</p>
+  if (error) return <p className="text-xs text-red-400 px-8 py-5">{error}</p>
 
   if (actuaciones.length === 0) {
     return (
-      <p className="text-xs text-so-muted px-5 py-6 text-center">
+      <p className="text-xs text-so-muted px-8 py-8 text-center tracking-wide">
         Sin actuaciones registradas aún.
       </p>
     )
@@ -139,39 +135,35 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
         />
       )}
 
-      <div className="divide-y divide-so-border/50">
-        {/* Header */}
-        <div className="grid grid-cols-[70px_90px_1fr_88px] gap-4 px-5 py-2 bg-so-surface/30">
-          <span className="text-[10px] uppercase tracking-wider text-so-muted">Tipo</span>
-          <span className="text-[10px] uppercase tracking-wider text-so-muted">Fecha</span>
-          <span className="text-[10px] uppercase tracking-wider text-so-muted">Detalle</span>
-          <span className="text-[10px] uppercase tracking-wider text-so-muted text-right">Doc</span>
-        </div>
+      {/* Header columnas */}
+      <div className="grid grid-cols-[120px_90px_1fr_72px] gap-6 px-8 py-3 border-b border-so-border/50">
+        {['Tipo', 'Fecha', 'Actuación', 'Doc'].map((h, i) => (
+          <span key={h} className={`text-[9px] font-bold tracking-[0.18em] uppercase text-so-muted ${i === 3 ? 'text-right' : ''}`}>
+            {h}
+          </span>
+        ))}
+      </div>
 
-        {actuaciones.map(act => {
+      <div>
+        {actuaciones.map((act, idx) => {
           const { titulo, fechaPresentacion, descripcion } = parseDetalle(act.detalle)
           const tituloDoc = titulo || act.detalle
 
           return (
-            <div key={act.id} className="grid grid-cols-[70px_90px_1fr_88px] gap-4 px-5 py-3.5 hover:bg-so-surface/30 transition-colors items-start">
-
+            <div
+              key={act.id}
+              className="grid grid-cols-[120px_90px_1fr_72px] gap-6 px-8 py-4 border-b border-so-border/30 hover:bg-so-surface/40 transition-colors items-start group"
+            >
               {/* Tipo */}
-              <div className="pt-0.5">
-                {act.tipo ? (
-                  <span
-                    title={act.tipo}
-                    className={`inline-flex items-center justify-center text-[9px] font-bold px-1.5 h-5 rounded border ${tipoColor(act.tipo)}`}
-                  >
-                    {tipoLabel(act.tipo)}
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-so-muted">—</span>
-                )}
+              <div className="pt-px">
+                <span className={`text-[10px] font-bold tracking-wide uppercase ${tipoColor(act.tipo)}`}>
+                  {tipoLabel(act.tipo || '—')}
+                </span>
               </div>
 
               {/* Fecha */}
-              <div className="pt-0.5">
-                <span className="text-xs font-medium text-so-text tabular-nums">
+              <div className="pt-px">
+                <span className="text-xs text-so-textMid tabular-nums font-mono">
                   {formatFecha(act.fecha)}
                 </span>
                 {act.fojas && (
@@ -180,48 +172,47 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
               </div>
 
               {/* Detalle */}
-              <div className="space-y-1 min-w-0">
+              <div className="space-y-0.5 min-w-0">
                 {titulo && (
                   <p className="text-xs font-semibold text-so-text leading-snug">{titulo}</p>
                 )}
                 {fechaPresentacion && (
                   <p className="text-[10px] text-so-muted">
-                    Presentado: <span className="text-so-textMid">{fechaPresentacion}</span>
+                    Presentado <span className="text-so-textMid">{fechaPresentacion}</span>
                   </p>
                 )}
                 {descripcion && (
                   <p className="text-[11px] text-so-textMid leading-relaxed">{descripcion}</p>
                 )}
-                {!fechaPresentacion && !titulo && (
-                  <p className="text-xs text-so-text leading-relaxed">{act.detalle}</p>
+                {!titulo && !fechaPresentacion && (
+                  <p className="text-xs text-so-text leading-snug">{act.detalle}</p>
                 )}
               </div>
 
-              {/* Doc — Ver + Descargar */}
-              <div className="flex items-center justify-end gap-2 pt-0.5">
+              {/* Doc */}
+              <div className="flex items-center justify-end gap-2.5 pt-px">
                 {act.urlBlob ? (
                   <>
                     <button
                       onClick={() => setViendoPdf({ url: act.urlBlob!, titulo: tituloDoc })}
-                      className="flex items-center gap-1 text-[10px] text-so-textMid hover:text-so-text transition-colors"
+                      className="text-so-muted hover:text-so-ash transition-colors"
                       title="Ver PDF"
                     >
-                      <Eye size={12} />
+                      <Eye size={13} />
                     </button>
                     <a
                       href={act.urlBlob}
                       download
-                      className="flex items-center gap-1 text-[10px] text-so-red hover:text-so-redLight transition-colors font-medium"
+                      className="text-so-muted hover:text-so-ash transition-colors"
                       title="Descargar PDF"
                     >
-                      <Download size={12} />
+                      <Download size={13} />
                     </a>
                   </>
                 ) : (
-                  <FileText size={12} className="text-so-border" />
+                  <FileText size={13} className="text-so-border" />
                 )}
               </div>
-
             </div>
           )
         })}

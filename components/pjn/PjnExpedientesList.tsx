@@ -4,16 +4,16 @@ import { useState } from 'react'
 import type { DBPjnExpediente } from '@/lib/queries'
 import PjnActuacionesPanel from './PjnActuacionesPanel'
 import PjnResumen from './PjnResumen'
-import { ChevronDown, ChevronRight, ExternalLink, LinkIcon } from 'lucide-react'
+import { Plus, Minus, ExternalLink, LinkIcon } from 'lucide-react'
 
 interface Props {
   expedientes: DBPjnExpediente[]
 }
 
 const SITUACION_COLOR: Record<string, string> = {
-  activo:    'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  archivado: 'bg-so-surface text-so-muted border-so-border',
-  paralizado:'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  activo:    'text-emerald-400',
+  archivado: 'text-so-muted',
+  paralizado:'text-yellow-400',
 }
 
 function situacionColor(s: string) {
@@ -21,7 +21,7 @@ function situacionColor(s: string) {
   for (const [key, cls] of Object.entries(SITUACION_COLOR)) {
     if (k.includes(key)) return cls
   }
-  return 'bg-so-surface text-so-muted border-so-border'
+  return 'text-so-muted'
 }
 
 export default function PjnExpedientesList({ expedientes }: Props) {
@@ -30,73 +30,82 @@ export default function PjnExpedientesList({ expedientes }: Props) {
   )
 
   return (
-    <div className="space-y-2">
-      {expedientes.map(exp => (
-        <div key={exp.id} className="bg-so-card border border-so-border rounded-xl overflow-hidden">
-          {/* Cabecera del expediente */}
-          <button
-            onClick={() => setExpanded(expanded === exp.id ? null : exp.id)}
-            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-so-surface/50 transition-colors text-left"
-          >
-            <div className="text-so-muted flex-shrink-0">
-              {expanded === exp.id
-                ? <ChevronDown size={15} />
-                : <ChevronRight size={15} />
-              }
-            </div>
+    <div className="border-t border-so-border">
+      {expedientes.map(exp => {
+        const isOpen = expanded === exp.id
 
-            {/* Número */}
-            <div className="flex-shrink-0 min-w-[140px]">
-              <p className="text-xs font-mono font-semibold text-so-text">{exp.nro}</p>
-              <p className="text-[10px] text-so-muted mt-0.5">{exp.dependencia}</p>
-            </div>
+        return (
+          <div key={exp.id} className="border-b border-so-border">
 
-            {/* Carátula */}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-so-text truncate">{exp.caratula}</p>
-              {exp.idCaso && (
-                <div className="flex items-center gap-1 mt-0.5">
-                  <LinkIcon size={9} className="text-so-red" />
-                  <span className="text-[10px] text-so-red">Vinculado a caso interno</span>
-                </div>
-              )}
-            </div>
-
-            {/* Situación */}
-            <div className="flex-shrink-0">
-              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${situacionColor(exp.situacion)}`}>
-                {exp.situacion || 'Sin estado'}
-              </span>
-            </div>
-
-            {/* Última actuación */}
-            <div className="flex-shrink-0 text-right hidden md:block">
-              <p className="text-[10px] text-so-muted uppercase tracking-wider">Última act.</p>
-              <p className="text-xs text-so-textMid">{exp.ultimaAct ?? '—'}</p>
-            </div>
-
-            {/* Link PJN */}
-            <a
-              href={`https://scw.pjn.gov.ar/scw/libroDigital.seam`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              className="flex-shrink-0 text-so-muted hover:text-so-text transition-colors"
-              title="Ver en PJN"
+            {/* ── Cabecera clicable ── */}
+            <button
+              onClick={() => setExpanded(isOpen ? null : exp.id)}
+              className="w-full flex items-start gap-6 px-8 py-6 hover:bg-so-surface/30 transition-colors text-left group"
             >
-              <ExternalLink size={13} />
-            </a>
-          </button>
+              {/* Toggle icon */}
+              <div className="flex-shrink-0 mt-1 w-5 h-5 flex items-center justify-center border border-so-border group-hover:border-so-ash transition-colors">
+                {isOpen
+                  ? <Minus size={11} className="text-so-ash" />
+                  : <Plus  size={11} className="text-so-muted group-hover:text-so-ash transition-colors" />
+                }
+              </div>
 
-          {/* Panel expandido */}
-          {expanded === exp.id && (
-            <div className="border-t border-so-border">
-              <PjnResumen idExpediente={exp.id} nro={exp.nro} caratula={exp.caratula} />
-              <PjnActuacionesPanel idExpediente={exp.id} />
-            </div>
-          )}
-        </div>
-      ))}
+              {/* Número + dependencia */}
+              <div className="flex-shrink-0 w-44">
+                <p className="font-mono text-xs font-semibold text-so-text tracking-wide">
+                  {exp.nro}
+                </p>
+                <p className="text-[10px] text-so-muted mt-1 leading-snug">{exp.dependencia}</p>
+              </div>
+
+              {/* Carátula */}
+              <div className="flex-1 min-w-0">
+                <p className="font-heading text-sm font-semibold text-so-text leading-snug group-hover:text-white transition-colors">
+                  {exp.caratula}
+                </p>
+                {exp.idCaso && (
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <LinkIcon size={9} className="text-so-ash" />
+                    <span className="text-[10px] text-so-ash tracking-wide">Vinculado a caso interno</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Situación */}
+              <div className="flex-shrink-0 hidden md:flex flex-col items-end gap-1">
+                <span className={`text-[10px] font-bold tracking-[0.12em] uppercase ${situacionColor(exp.situacion)}`}>
+                  {exp.situacion || 'Sin estado'}
+                </span>
+                {exp.ultimaAct && (
+                  <span className="text-[10px] text-so-muted tabular-nums">
+                    Últ. {exp.ultimaAct}
+                  </span>
+                )}
+              </div>
+
+              {/* Link externo PJN */}
+              <a
+                href="https://scw.pjn.gov.ar/scw/libroDigital.seam"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="flex-shrink-0 mt-0.5 text-so-border hover:text-so-ash transition-colors"
+                title="Ver en PJN"
+              >
+                <ExternalLink size={13} />
+              </a>
+            </button>
+
+            {/* ── Panel expandido ── */}
+            {isOpen && (
+              <div className="border-t border-so-border/50">
+                <PjnResumen idExpediente={exp.id} nro={exp.nro} caratula={exp.caratula} />
+                <PjnActuacionesPanel idExpediente={exp.id} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

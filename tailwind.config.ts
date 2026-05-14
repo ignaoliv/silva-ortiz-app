@@ -22,6 +22,8 @@ const config: Config = {
           red:      '#82181a',
           redBright:'#e40014',
           redLight: '#ff6568',
+          ash:      '#746572',
+          ashLight: '#9d8a9b',
         },
       },
       fontFamily: {
