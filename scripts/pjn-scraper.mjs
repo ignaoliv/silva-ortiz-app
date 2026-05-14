@@ -135,24 +135,32 @@ async function descargarPorHref(page, href, nroExp, fecha, idx) {
 // Tabla: id="expediente:action-table"
 // Botón descarga: <a href="/scw/viewer.seam?id=...&download=true" target="_blank">
 async function extraerActuacionesExpediente(page, nroExp) {
-  // Click en el tab header "Actuaciones" — usar locator por texto (más robusto que ID)
-  // En RichFaces el header clickeable está FUERA del div expediente:actuaciones
-  const tabActuaciones = page.locator('.rf-tab-hdr:has-text("Actuaciones"), [class*="tab-hdr"]:has-text("Actuaciones"), [class*="tab"]:has-text("Actuaciones"), a:has-text("Actuaciones")').first()
-  await tabActuaciones.click({ timeout: 5000 }).catch(async () => {
-    // Fallback: buscar por texto visible en la zona de tabs
+  // Click en el tab "Actuaciones"
+  // RichFaces tabPanel: headers en rf-tbp-itm / rf-tab-hdr FUERA del div expediente:actuaciones
+  const clicked = await page.locator([
+    '.rf-tbp-itm:has-text("Actuaciones")',
+    '.rf-tab-hdr:has-text("Actuaciones")',
+    '.rf-tbp-hdr *:has-text("Actuaciones")',
+    '.nav-tabs a:has-text("Actuaciones")',
+    '[role="tab"]:has-text("Actuaciones")',
+  ].join(', ')).first().click({ timeout: 5000 }).then(() => true).catch(() => false)
+
+  if (!clicked) {
+    // Fallback: elemento con texto exacto "Actuaciones" con cursor pointer
     await page.evaluate(() => {
-      const all = [...document.querySelectorAll('div, span, a, li')]
-      const tab = all.find(el =>
-        el.textContent.trim() === 'Actuaciones' &&
-        el.children.length <= 1 &&
-        /tab|header|hdr|nav/i.test(el.className + (el.parentElement?.className || ''))
-      )
-      if (tab) tab.click()
+      const el = [...document.querySelectorAll('div,span,a,td,li')]
+        .find(e => e.textContent.trim() === 'Actuaciones' && e.children.length <= 1)
+      if (el) el.click()
     })
-  })
-  // Esperar a que la tabla de actuaciones aparezca en el DOM
-  await page.waitForSelector('[id="expediente:action-table"]', { timeout: 12000 }).catch(() => {})
+  }
+
+  // Esperar a que la tabla cargue (AJAX lazy-load del tab)
+  await page.waitForSelector('[id="expediente:action-table"]', { timeout: 15000 }).catch(() => {})
   await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
+
+  // Log para debug
+  const tblFound = await page.evaluate(() => !!document.getElementById('expediente:action-table'))
+  console.log(`      🗂️  Tab Actuaciones — tabla encontrada: ${tblFound}`)
 
   // Leer tabla de actuaciones
   const items = await page.evaluate(() => {
