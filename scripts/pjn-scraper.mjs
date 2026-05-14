@@ -351,60 +351,37 @@ async function main() {
 
         let navegoExp = false
 
-        // Estrategia 1: ícono del ojo (👁) en la fila → expediente.seam
+        // El botón del ojo: <a href="#" onclick="...mojarra.jsfcljs(...)">
+        //   <i class="fa fa-eye fa-lg"> <span>visualizar expediente</span>
+        // Estrategia 1: buscar en la fila por fa-eye
         try {
-          const fila$ = await page.locator(`td:text-is("${fila.nro}")`).first()
+          const fila$ = page.locator(`td:text-is("${fila.nro}")`).first()
           if (await fila$.isVisible({ timeout: 3000 })) {
             const filaRow = fila$.locator('xpath=ancestor::tr[1]')
-            // El ícono del ojo suele ser un <a> o <button> con una imagen/icono
-            // Probamos todos los links de la fila hasta encontrar el que va a expediente.seam
-            const links = filaRow.locator('a, button')
-            const count = await links.count()
-            for (let li = 0; li < count && !navegoExp; li++) {
-              const lnk    = links.nth(li)
-              const href   = await lnk.getAttribute('href').catch(() => '')
-              const title  = await lnk.getAttribute('title').catch(() => '')
-              const ltext  = await lnk.textContent().catch(() => '')
-              const isEye  = /expediente|ver|view|👁/i.test(href + title + ltext)
-              if (isEye || li === 0) {  // probar el primero y cualquier match
-                await lnk.click()
-                await page.waitForTimeout(1500)
-                if (page.url().includes('expediente.seam')) { navegoExp = true; break }
-                // Si abrió un dropdown, cerrar y probar siguiente
-                await page.keyboard.press('Escape').catch(() => {})
-              }
-            }
-          }
-        } catch (_) {}
-
-        // Estrategia 2: dropdown → buscar opción distinta a "Libro digital"
-        if (!navegoExp) {
-          console.log(`    🔽 Fallback: dropdown por índice ${idx}`)
-          const dropdownBtns = await page.$$('button.dropdown-toggle, button[data-toggle="dropdown"], .btn-group button:last-child, td:last-child button')
-          console.log(`       Botones encontrados: ${dropdownBtns.length}`)
-          if (dropdownBtns[idx]) {
-            await dropdownBtns[idx].click()
-            await page.waitForTimeout(800)
-            // Primero intentar "Ver expediente" o link a expediente.seam
-            const expLink = await page.$('a[href*="expediente.seam"], a:has-text("Ver expediente"), li:has-text("Ver expediente") a')
-            if (expLink) {
-              await expLink.click()
+            const eyeBtn  = filaRow.locator('a:has(i.fa-eye), a:has(.fa-eye)').first()
+            if (await eyeBtn.isVisible({ timeout: 2000 })) {
+              await eyeBtn.click()
               await page.waitForURL('**/expediente.seam**', { timeout: 15000 }).catch(() => {})
               await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
               navegoExp = page.url().includes('expediente.seam')
             }
           }
-        }
+        } catch (_) {}
 
-        // Estrategia 3: link directo en la página a expediente.seam
+        // Estrategia 2: Nth botón fa-eye en la página (por índice de expediente)
         if (!navegoExp) {
-          const expDirecto = await page.$('a[href*="expediente.seam"]')
-          if (expDirecto) {
-            await expDirecto.click()
-            await page.waitForURL('**/expediente.seam**', { timeout: 15000 }).catch(() => {})
-            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
-            navegoExp = page.url().includes('expediente.seam')
-          }
+          console.log(`    🔽 Fallback: eye por índice ${idx}`)
+          try {
+            const eyeBtns = page.locator('a:has(i.fa-eye), a:has(.fa-eye)')
+            const count   = await eyeBtns.count()
+            console.log(`       Botones eye encontrados: ${count}`)
+            if (idx < count) {
+              await eyeBtns.nth(idx).click()
+              await page.waitForURL('**/expediente.seam**', { timeout: 15000 }).catch(() => {})
+              await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
+              navegoExp = page.url().includes('expediente.seam')
+            }
+          } catch (_) {}
         }
 
         if (!navegoExp) {
