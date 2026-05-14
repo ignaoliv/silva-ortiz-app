@@ -7,9 +7,9 @@ const ALLOWED_EMAILS = ['dji.olivieri@gmail.com']
 export const authOptions: NextAuthOptions = {
   providers: [
     AzureADProvider({
-      clientId: process.env.AZURE_AD_CLIENT_ID!,
+      clientId:     process.env.AZURE_AD_CLIENT_ID!,
       clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
-      tenantId: process.env.AZURE_AD_TENANT_ID!,
+      tenantId:     'common', // multi-tenant: acepta cualquier org de Microsoft
       authorization: {
         params: {
           scope: 'openid profile email offline_access',
