@@ -132,7 +132,15 @@ async function encontrarItemsPanel(page) {
       const tipo = badgeEl?.textContent?.trim().substring(0, 10) || ''
       const lineas = texto.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
       const desc = lineas
-        .filter(l => !l.match(/^\d{2}\/\d{2}\/\d{4}$/) && !l.match(/^fs\./i) && !l.match(/^foja/i) && l.length > 2)
+        .filter(l =>
+          !l.match(/^\d{2}\/\d{2}\/\d{4}$/) &&
+          !l.match(/^fs\./i) &&
+          !l.match(/^foja/i) &&
+          !l.match(/^tipo\s*actuacion\s*:/i) &&
+          !l.match(/^detalle\s*:/i) &&
+          !l.match(/^actuaciones\s+actuales/i) &&
+          l.length > 2
+        )
         .join(' ').trim().substring(0, 900)
 
       // Guardar un selector único para poder hacer click desde Playwright
@@ -158,13 +166,12 @@ async function descargarDocumentoActuacion(page, itemSelector, nroExp, fecha, id
       { timeout: 12000 }
     ).catch(() => null)
 
-    // Click en la fila del panel izquierdo
-    await page.evaluate((sel, domIdx) => {
+    // Click en la fila del panel izquierdo (page.evaluate solo acepta 1 argumento extra)
+    await page.evaluate(({ sel, domIdx }) => {
       let el
       if (sel) {
         el = document.querySelector(sel)
       } else {
-        // Buscar por índice entre elementos con fecha
         const todos = [...document.querySelectorAll('div, td, li, tr, span')].filter(e =>
           /\d{2}\/\d{2}\/\d{4}/.test(e.textContent || '') &&
           (e.textContent || '').length < 2000 &&
@@ -173,7 +180,7 @@ async function descargarDocumentoActuacion(page, itemSelector, nroExp, fecha, id
         el = todos[domIdx]
       }
       if (el) el.click()
-    }, itemSelector, idx)
+    }, { sel: itemSelector, domIdx: idx })
 
     const response = await responsePromise
     if (response && response.ok()) {
