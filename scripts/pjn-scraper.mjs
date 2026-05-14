@@ -100,47 +100,27 @@ function esc(s, max = 499) {
   return (String(s || '')).replace(/'/g, "''").substring(0, max)
 }
 
-// ── Descargar PDF clickeando el botón de descarga directo ────────
-async function descargarDocumentoDirecto(page, dlBtnId, nroExp, fecha, idx) {
+// ── Descargar PDF via href directo con fetch (cookies de sesión) ──
+async function descargarPorHref(page, href, nroExp, fecha, idx) {
   try {
-    const btn = page.locator(`[id="${dlBtnId}"]`)
-    const [popup, download] = await Promise.all([
-      page.waitForEvent('popup',    { timeout: 12000 }).catch(() => null),
-      page.waitForEvent('download', { timeout: 12000 }).catch(() => null),
-      btn.click(),
-    ])
-    await page.waitForTimeout(1000)
+    const url = href.startsWith('http') ? href : `https://scw.pjn.gov.ar${href}`
 
-    let pdfBuffer = null
+    // fetch() dentro del contexto de la page tiene las cookies de sesión
+    const arr = await page.evaluate(async (u) => {
+      const r = await fetch(u, { credentials: 'include' })
+      if (!r.ok) return null
+      return Array.from(new Uint8Array(await r.arrayBuffer()))
+    }, url)
 
-    if (download) {
-      const tmpPath = await download.path()
-      if (tmpPath) {
-        pdfBuffer = await fsPromises.readFile(tmpPath)
-        console.log(`          📡 PDF via download (${pdfBuffer.length} bytes)`)
-      }
-    } else if (popup) {
-      console.log(`          🗔 PDF en popup: ${popup.url()}`)
-      await popup.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
-      // Intentar leer PDF de la URL de la popup
-      const arr = await popup.evaluate(async () => {
-        const r = await fetch(window.location.href, { credentials: 'include' })
-        if (!r.ok) return null
-        return Array.from(new Uint8Array(await r.arrayBuffer()))
-      }).catch(() => null)
-      if (arr) pdfBuffer = Buffer.from(arr)
-      pdfBuffer = pdfBuffer || null
-      await popup.close().catch(() => {})
-    } else {
-      console.log(`          ⚠️  Sin popup ni download`)
-    }
-
-    if (!pdfBuffer || pdfBuffer.length < 100) {
-      console.log(`          📄 Sin documento (${pdfBuffer?.length ?? 0} bytes)`)
+    if (!arr || arr.length < 500) {
+      console.log(`          ⚠️  Respuesta vacía o chica (${arr?.length ?? 0} bytes)`)
       return null
     }
 
-    const nombre  = `${nroExp}_${fecha.replace(/\//g, '-')}_${idx}.pdf`
+    const pdfBuffer = Buffer.from(arr)
+    console.log(`          📡 PDF via fetch (${pdfBuffer.length} bytes)`)
+
+    const nombre  = `${nroExp.replace(/\s/g, '_')}_${fecha.replace(/\//g, '-')}_${idx}.pdf`
     const blobUrl = await subirPDF(pdfBuffer, nombre)
     if (blobUrl) console.log(`          ☁️  Subido: ${blobUrl.split('?')[0]}`)
     return blobUrl
@@ -152,54 +132,40 @@ async function descargarDocumentoDirecto(page, dlBtnId, nroExp, fecha, idx) {
 }
 
 // ── Extraer actuaciones desde expediente.seam ────────────────────
+// Tabla: id="expediente:action-table"
+// Botón descarga: <a href="/scw/viewer.seam?id=...&download=true" target="_blank">
 async function extraerActuacionesExpediente(page, nroExp) {
-  // Asegurarse de estar en la pestaña Actuaciones
-  await page.locator('text=Actuaciones').first().click().catch(() => {})
+  // Asegurarse de estar en la pestaña Actuaciones (tab id="expediente:actuaciones")
+  await page.evaluate(() => {
+    const tab = document.querySelector('[id="expediente:actuaciones"] a, #expediente\\:actuaciones a')
+    if (tab) tab.click()
+  }).catch(() => {})
   await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
   await page.waitForTimeout(500)
 
-  // Leer la tabla de actuaciones
+  // Leer tabla de actuaciones
   const items = await page.evaluate(() => {
-    // Buscar la tabla que tiene columnas FECHA y TIPO
-    const tables = [...document.querySelectorAll('table')]
-    const tbl = tables.find(t => {
-      const txt = (t.querySelector('thead, tr') || t).textContent || ''
-      return /FECHA/i.test(txt) && /TIPO/i.test(txt)
-    }) || tables.find(t => [...t.querySelectorAll('td')].some(td => /\d{2}\/\d{2}\/\d{4}/.test(td.textContent)))
-
+    const tbl = document.getElementById('expediente:action-table')
     if (!tbl) return []
 
-    const rows = [...tbl.querySelectorAll('tbody tr, tr')].filter(tr => {
-      const tds = tr.querySelectorAll('td')
-      return tds.length >= 3
-    })
-
-    return rows.map(tr => {
+    return [...tbl.querySelectorAll('tbody tr')].map(tr => {
       const cells = [...tr.querySelectorAll('td')]
 
-      // Encontrar la celda con la fecha
+      // Celda de acciones: primera celda, contiene <a href="...download=true">
+      const dlLink  = tr.querySelector('a[href*="download=true"]')
+      const dlHref  = dlLink?.getAttribute('href') || null
+
+      // Celda con fecha DD/MM/YYYY
       const fechaCell = cells.find(td => /^\d{2}\/\d{2}\/\d{4}$/.test(td.textContent.trim()))
       if (!fechaCell) return null
       const fi = cells.indexOf(fechaCell)
 
-      const fecha       = fechaCell.textContent.trim()
-      const tipo        = cells[fi + 1]?.textContent.trim() || ''
-      const descripcion = cells[fi + 2]?.textContent.trim() || ''
-      const fojas       = cells[fi + 3]?.textContent.trim() || ''
-
-      // Botón de descarga: buscar en las celdas ANTES de la fecha (columnas de acción)
-      let dlBtnId = null
-      for (let i = 0; i < fi; i++) {
-        const a = cells[i].querySelector('a[id], button[id]')
-        if (a) { dlBtnId = a.id; break }
-      }
-
       return {
-        fecha,
-        tipo:        tipo.substring(0, 99),
-        descripcion: descripcion.substring(0, 999),
-        fojas:       fojas.substring(0, 49),
-        dlBtnId,
+        fecha:       fechaCell.textContent.trim(),
+        tipo:        cells[fi + 1]?.textContent.trim().substring(0, 99)  || '',
+        descripcion: cells[fi + 2]?.textContent.trim().substring(0, 999) || '',
+        fojas:       cells[fi + 3]?.textContent.trim().substring(0, 49)  || '',
+        dlHref,
       }
     }).filter(Boolean)
   })
@@ -212,22 +178,14 @@ async function extraerActuacionesExpediente(page, nroExp) {
 
   // Descargar documentos
   const resultado = []
-  const expUrl    = page.url()
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
-    const tieneDoc = !!item.dlBtnId
-    console.log(`        📄 [${i+1}/${items.length}] ${item.fecha} — ${item.descripcion.substring(0, 60)} ${tieneDoc ? '⬇️' : ''}`)
+    console.log(`        📄 [${i+1}/${items.length}] ${item.fecha} — ${item.descripcion.substring(0, 60)}${item.dlHref ? ' ⬇️' : ''}`)
 
     let urlBlob = null
-    if (tieneDoc) {
-      // Volver al expediente si nos fuimos
-      if (!page.url().includes('expediente.seam')) {
-        await page.goto(expUrl, { waitUntil: 'networkidle', timeout: 20000 }).catch(() => {})
-        await page.locator('text=Actuaciones').first().click().catch(() => {})
-        await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
-      }
-      urlBlob = await descargarDocumentoDirecto(page, item.dlBtnId, nroExp.replace(/\s/g, '_'), item.fecha, i)
-      await page.waitForTimeout(800)
+    if (item.dlHref) {
+      urlBlob = await descargarPorHref(page, item.dlHref, nroExp, item.fecha, i)
+      await page.waitForTimeout(500)
     }
 
     resultado.push({ ...item, urlBlob })
