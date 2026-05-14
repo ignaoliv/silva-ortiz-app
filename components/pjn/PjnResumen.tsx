@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ArrowRight, RefreshCw, Loader2 } from 'lucide-react'
+import ClaudeIcon from '@/components/ClaudeIcon'
 
 interface Props {
   idExpediente: number
@@ -64,14 +65,20 @@ export default function PjnResumen({ idExpediente, nro, caratula }: Props) {
             </p>
           </div>
 
-          {/* Botón derecha — fill animation */}
+          {/* Botón derecha — fill animation con Claude isotipo */}
           <button
             onClick={generar}
             className="group relative overflow-hidden flex items-center gap-4 px-10 py-8 text-xs font-bold tracking-[0.15em] uppercase text-so-ash border-l-4 border-so-ash bg-transparent hover:text-white transition-colors duration-300"
           >
-            {/* fill de derecha a izquierda no, del borde izquierdo */}
             <span className="absolute inset-0 bg-so-ash scale-x-0 origin-left group-hover:scale-x-100 transition-transform duration-500 ease-[cubic-bezier(.4,0,.2,1)]" />
             <span className="relative flex items-center gap-3 whitespace-nowrap">
+              {/* Claude isotipo prominente */}
+              <span className="flex items-center gap-2 bg-[#D4A847]/15 border border-[#D4A847]/40 group-hover:bg-white/10 group-hover:border-white/30 px-2.5 py-1.5 transition-colors duration-300">
+                <ClaudeIcon size={16} className="text-[#D4A847] group-hover:text-white transition-colors duration-300" />
+                <span className="text-[9px] font-bold tracking-[0.2em] text-[#D4A847] group-hover:text-white transition-colors duration-300">
+                  Claude AI
+                </span>
+              </span>
               Generar análisis
               <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
             </span>
@@ -85,8 +92,14 @@ export default function PjnResumen({ idExpediente, nro, caratula }: Props) {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-px h-5 bg-so-ash" />
+              <div className="flex items-center gap-1.5 bg-[#D4A847]/10 border border-[#D4A847]/30 px-2 py-1">
+                <ClaudeIcon size={12} className="text-[#D4A847]" />
+                <span className="text-[9px] font-bold tracking-[0.18em] uppercase text-[#D4A847]">
+                  Claude AI
+                </span>
+              </div>
               <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-so-ash">
-                Análisis IA
+                Análisis del expediente
               </p>
               {loading && <Loader2 size={11} className="animate-spin text-so-ash" />}
             </div>

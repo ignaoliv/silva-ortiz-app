@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import type { DBPjnActuacion } from '@/lib/queries'
 import { Download, Loader2, Eye, X, FileText } from 'lucide-react'
+import ClaudeIcon from '@/components/ClaudeIcon'
+import DocResumenModal from '@/components/pjn/DocResumenModal'
 
 interface Props {
   idExpediente: number
@@ -98,6 +100,7 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState<string | null>(null)
   const [viendoPdf, setViendoPdf]     = useState<{ url: string; titulo: string } | null>(null)
+  const [resumiendo, setResumiendo]   = useState<{ url: string; titulo: string } | null>(null)
 
   useEffect(() => {
     fetch(`/api/pjn/actuaciones?id=${idExpediente}`)
@@ -135,8 +138,20 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
         />
       )}
 
+      {resumiendo && (
+        <DocResumenModal
+          blobUrl={resumiendo.url}
+          titulo={resumiendo.titulo}
+          onClose={() => setResumiendo(null)}
+          onVerPdf={() => {
+            setViendoPdf({ url: resumiendo.url, titulo: resumiendo.titulo })
+            setResumiendo(null)
+          }}
+        />
+      )}
+
       {/* Header columnas */}
-      <div className="grid grid-cols-[120px_90px_1fr_72px] gap-6 px-8 py-3 border-b border-so-border/50">
+      <div className="grid grid-cols-[120px_90px_1fr_88px] gap-6 px-8 py-3 border-b border-so-border/50">
         {['Tipo', 'Fecha', 'Actuación', 'Doc'].map((h, i) => (
           <span key={h} className={`text-[9px] font-bold tracking-[0.18em] uppercase text-so-muted ${i === 3 ? 'text-right' : ''}`}>
             {h}
@@ -152,7 +167,7 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
           return (
             <div
               key={act.id}
-              className="grid grid-cols-[120px_90px_1fr_72px] gap-6 px-8 py-4 border-b border-so-border/30 hover:bg-so-surface/40 transition-colors items-start group"
+              className="grid grid-cols-[120px_90px_1fr_88px] gap-6 px-8 py-4 border-b border-so-border/30 hover:bg-so-surface/40 transition-colors items-start group"
             >
               {/* Tipo */}
               <div className="pt-px">
@@ -190,9 +205,17 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
               </div>
 
               {/* Doc */}
-              <div className="flex items-center justify-end gap-2.5 pt-px">
+              <div className="flex items-center justify-end gap-2 pt-px">
                 {act.urlBlob ? (
                   <>
+                    {/* Claude: resumir este PDF */}
+                    <button
+                      onClick={() => setResumiendo({ url: act.urlBlob!, titulo: tituloDoc })}
+                      className="text-[#D4A847]/50 hover:text-[#D4A847] transition-colors"
+                      title="Resumir con Claude IA"
+                    >
+                      <ClaudeIcon size={13} />
+                    </button>
                     <button
                       onClick={() => setViendoPdf({ url: act.urlBlob!, titulo: tituloDoc })}
                       className="text-so-muted hover:text-so-ash transition-colors"
