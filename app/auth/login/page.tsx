@@ -2,11 +2,14 @@
 import Image from 'next/image'
 import { signIn, useSession } from 'next-auth/react'
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
+function LoginContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
 
   useEffect(() => {
     if (session) router.push('/expedientes')
@@ -19,6 +22,12 @@ export default function LoginPage() {
       </div>
     )
   }
+
+  const errorMsg = error === 'AccessDenied'
+    ? 'Tu cuenta no pertenece al dominio @silvaortiz.com.ar. Solo usuarios del estudio pueden acceder.'
+    : error
+    ? 'Ocurrió un error al iniciar sesión. Intentá de nuevo.'
+    : null
 
   return (
     <div className="min-h-screen bg-so-bg flex">
@@ -65,6 +74,12 @@ export default function LoginPage() {
             Accedé con tu cuenta corporativa de Microsoft.
           </p>
 
+          {errorMsg && (
+            <div className="mb-6 px-4 py-3 bg-red-500/10 border border-red-500/30 text-xs text-red-400 leading-relaxed">
+              {errorMsg}
+            </div>
+          )}
+
           <button
             onClick={() => signIn('azure-ad', { callbackUrl: '/expedientes' })}
             className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded
@@ -83,8 +98,8 @@ export default function LoginPage() {
 
           <div className="mt-8 pt-8 border-t border-so-border">
             <p className="text-xs text-so-muted text-center leading-relaxed">
-              Solo usuarios autorizados del estudio.<br />
-              Contactá al administrador si no podés acceder.
+              Solo cuentas <span className="text-so-textMid">@silvaortiz.com.ar</span> pueden acceder.<br />
+              Contactá al administrador si no podés ingresar.
             </p>
           </div>
 
@@ -94,5 +109,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-so-bg flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-so-border border-t-so-red rounded-full animate-spin" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }

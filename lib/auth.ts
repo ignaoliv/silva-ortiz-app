@@ -1,6 +1,8 @@
 import type { NextAuthOptions } from 'next-auth'
 import AzureADProvider from 'next-auth/providers/azure-ad'
 
+const ALLOWED_DOMAIN = '@silvaortiz.com.ar'
+
 export const authOptions: NextAuthOptions = {
   providers: [
     AzureADProvider({
@@ -19,6 +21,14 @@ export const authOptions: NextAuthOptions = {
     error: '/auth/login',
   },
   callbacks: {
+    async signIn({ user }) {
+      // Solo permitir cuentas con dominio @silvaortiz.com.ar
+      const email = user.email ?? ''
+      if (!email.toLowerCase().endsWith(ALLOWED_DOMAIN)) {
+        return '/auth/login?error=AccessDenied'
+      }
+      return true
+    },
     async jwt({ token, account }) {
       if (account) {
         token.accessToken = account.access_token
