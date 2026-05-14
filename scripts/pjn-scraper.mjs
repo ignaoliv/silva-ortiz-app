@@ -164,176 +164,95 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
     let pdfBuffer = null
     let pdfUrl    = null
 
-    // 1. Click en la fila del panel izquierdo
-    // Los links JSF del libro digital son <a> con handlers ajax
-    const clickInfo = await page.evaluate(({ domId, domIdx }) => {
-      // Estrategia A: buscar <a> con fecha en el texto (links JSF ajax)
-      const anchors = [...document.querySelectorAll('a')].filter(el =>
-        /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || '') &&
-        (el.textContent || '').length < 500
-      )
-      // Estrategia B: buscar <tr> o <li> clickeables con fecha
-      const rows = [...document.querySelectorAll('tr[onclick], tr[id], li[onclick], li[id]')].filter(el =>
-        /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || '')
-      )
-      // Estrategia C: getElementById
-      const byId = domId ? document.getElementById(domId) : null
-
-      // Elegir el mejor candidato
-      let el = anchors[domIdx] || rows[domIdx] || byId
+    // 1. Click en la fila usando su ID JSF (getElementById no requiere escapar ":")
+    await page.evaluate(({ domId, domIdx }) => {
+      let el = domId ? document.getElementById(domId) : null
       if (!el) {
-        // Fallback: cualquier elemento hoja con fecha
-        const todos = [...document.querySelectorAll('td, span, div')].filter(e =>
-          /\d{2}\/\d{2}\/\d{4}/.test(e.textContent || '') &&
-          (e.textContent || '').length < 500 &&
-          !e.querySelector('a, td, span, div')
+        // Fallback: <a> con la fecha en el texto dentro del panel izquierdo
+        const panel = document.getElementById('libroDigitalForm:tblSelActuaciones') || document.body
+        const anchors = [...panel.querySelectorAll('a')].filter(a =>
+          /\d{2}\/\d{2}\/\d{4}/.test(a.textContent || '') && (a.textContent || '').length < 500
         )
-        el = todos[domIdx]
+        el = anchors[domIdx]
       }
-
-      if (el) {
-        const info = `tag=${el.tagName} id="${el.id}" class="${el.className.substring(0,50)}" text="${(el.textContent||'').trim().substring(0,60)}"`
-        el.click()
-        return info
-      }
-      return 'no element found'
+      if (el) el.click()
     }, { domId: item.domId, domIdx: idx })
-    console.log(`          🖱️  Clicked: ${clickInfo}`)
 
-    // 2. Esperar que el AJAX de JSF/RichFaces cargue el viewer en el panel derecho
+    // 2. Esperar que AJAX cargue el viewer
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(1500)
 
-    // Log del panel IZQUIERDO (lista de actuaciones) para entender la estructura clickeable
-    const leftHtml = await page.evaluate(() => {
-      const all = [...document.querySelectorAll('*')].find(el =>
-        /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || '') &&
-        el.children.length > 0 && el.children.length < 20 &&
-        (el.textContent || '').length < 3000
-      )
-      return all ? all.outerHTML.substring(0, 1000) : 'no left panel found'
-    })
-    console.log(`          🗂️  Panel izquierdo HTML:\n${leftHtml}`)
-
-    // Log del panel derecho para entender la estructura
-    const panelHtml = await page.evaluate(() => {
-      // Buscar el panel derecho / viewer
-      const candidates = [
-        document.querySelector('[id*="panelDer"]'),
-        document.querySelector('[id*="right"]'),
-        document.querySelector('[id*="viewer"]'),
-        document.querySelector('[id*="documento"]'),
-        document.querySelector('[id*="panel"][id*="body"]'),
-        document.querySelector('.rich-panel-body'),
-        // Buscar cualquier elemento que tenga texto sobre el documento
-        [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')]
-          .filter(el => /descargar|bajar|ver\s+doc|download/i.test(el.textContent + el.value + el.title))[0]
-          ?.closest('div, form, table'),
-      ].filter(Boolean)
-      const panel = candidates[0]
-      if (panel) return panel.innerHTML.substring(0, 1500)
-      // Si no encontramos el panel, loguear todos los links/botones
-      const todos = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')]
-        .map(el => `<${el.tagName} href="${el.getAttribute('href')}" id="${el.id}" value="${el.getAttribute('value')}">${el.textContent.trim().substring(0,30)}</${el.tagName}>`)
-        .join('\n')
-      return 'TODOS LOS BOTONES/LINKS:\n' + todos.substring(0, 1500)
-    })
-    console.log(`          🔍 Panel post-click:\n${panelHtml}`)
-
-    // 3. Buscar el botón "Descargar" en el viewer e interceptar el PDF
-    const dlSelectors = [
-      'a:has-text("Descargar")',
-      'button:has-text("Descargar")',
-      'a:has-text("descargar")',
-      'input[value*="escargar"]',
-      'a[title*="escargar"]',
-      'a[id*="escargar"]',
-      '[id*="descargar"]',
-      '[id*="download"]',
-      'a[href*="descargar"]',
-      'a[href*="download"]',
-    ]
-
-    let dlBtn = null
-    for (const sel of dlSelectors) {
-      const candidates = await page.$$(sel)
-      // Filtrar: excluir links que apunten a dominios externos (ej: chrome download banner)
-      for (const el of candidates) {
-        const href = await el.getAttribute('href').catch(() => '')
-        if (href && (href.includes('google.com') || href.includes('chrome') || href.includes('mozilla'))) continue
-        dlBtn = el
-        console.log(`          🔘 Botón encontrado: ${sel} (href: ${href?.substring(0, 60)})`)
-        break
-      }
-      if (dlBtn) break
+    // 3. Verificar que el viewer cargó (navbar con j_idt174 apareció)
+    const viewerCargado = await page.evaluate(() =>
+      !!document.querySelector('[id*="j_idt174"]')
+    )
+    if (!viewerCargado) {
+      console.log(`          ⚠️  Viewer no cargó`)
+      return null
     }
 
-    if (dlBtn) {
-      // Log href del botón para diagnóstico
-      const btnHref = await dlBtn.getAttribute('href').catch(() => null)
-      const btnOnclick = await dlBtn.getAttribute('onclick').catch(() => null)
-      console.log(`          href="${btnHref}" onclick="${btnOnclick?.substring(0,80)}"`)
+    // 4. El tercer botón de la navbar del viewer es "Descargar"
+    // Navbar: [Anterior] [Siguiente] [Descargar] ...
+    // ID pattern: libroDigitalForm:j_idt174:j_idt180 (tercer link del navbar)
+    const dlBtn = await page.evaluate(() => {
+      const navbar = document.querySelector('[id*="j_idt174"]')?.closest('ul, nav, div') ||
+                     document.querySelector('[id*="j_idt174"]')?.parentElement
+      if (!navbar) return null
+      const links = [...navbar.querySelectorAll('a[id*="j_idt174"]')]
+      // El de descarga es el que NO tiene título Anterior/Siguiente
+      const dl = links.find(a => {
+        const t = (a.title + a.textContent).toLowerCase()
+        return !t.includes('anterior') && !t.includes('siguiente') && !t.includes('prev') && !t.includes('next')
+      })
+      return dl ? { id: dl.id, title: dl.title, text: dl.textContent.trim().substring(0, 30) } : null
+    })
 
-      // Estrategia 1: el botón abre PDF en nueva pestaña (popup)
-      const [popup, download] = await Promise.all([
-        page.waitForEvent('popup',    { timeout: 8000 }).catch(() => null),
-        page.waitForEvent('download', { timeout: 8000 }).catch(() => null),
-        dlBtn.click(),
-      ])
+    if (!dlBtn?.id) {
+      console.log(`          ⚠️  Botón descarga no encontrado en viewer`)
+      return null
+    }
+    console.log(`          🔘 Descarga: id="${dlBtn.id}" title="${dlBtn.title}" text="${dlBtn.text}"`)
 
-      if (download) {
-        const tmpPath = await download.path()
-        if (tmpPath) {
-          pdfBuffer = await fsPromises.readFile(tmpPath)
-          pdfUrl    = download.url()
-          console.log(`          📡 PDF via download event (${pdfBuffer.length} bytes)`)
-        }
-      } else if (popup) {
-        console.log(`          🗔 PDF en nueva pestaña: ${popup.url()}`)
-        await popup.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
-        // Capturar el PDF de la respuesta de la nueva pestaña
-        const pdfRes = await popup.waitForResponse(
-          r => r.headers()['content-type']?.includes('pdf') || r.url().includes('.pdf'),
-          { timeout: 5000 }
-        ).catch(() => null)
-        if (pdfRes?.ok()) {
-          pdfBuffer = await pdfRes.body()
-          pdfUrl    = pdfRes.url()
-          console.log(`          📡 PDF via popup (${pdfBuffer.length} bytes)`)
-        } else {
-          // Intentar navegar directamente a la URL del popup
-          pdfUrl = popup.url()
-          if (pdfUrl && pdfUrl !== 'about:blank') {
-            pdfBuffer = await popup.evaluate(async (url) => {
-              const r = await fetch(url, { credentials: 'include' })
-              if (!r.ok) return null
-              const buf = await r.arrayBuffer()
-              return Array.from(new Uint8Array(buf))
-            }, pdfUrl).catch(() => null)
-            if (pdfBuffer) pdfBuffer = Buffer.from(pdfBuffer)
-          }
-        }
-        await popup.close().catch(() => {})
+    // 5. Click en el botón de descarga e interceptar popup o download
+    const viewerBtn = page.locator(`[id="${dlBtn.id}"]`)
+    const [popup, download] = await Promise.all([
+      page.waitForEvent('popup',    { timeout: 12000 }).catch(() => null),
+      page.waitForEvent('download', { timeout: 12000 }).catch(() => null),
+      viewerBtn.click(),
+    ])
+
+    if (download) {
+      const tmpPath = await download.path()
+      if (tmpPath) {
+        pdfBuffer = await fsPromises.readFile(tmpPath)
+        pdfUrl    = download.url()
+        console.log(`          📡 PDF via download (${pdfBuffer.length} bytes)`)
+      }
+    } else if (popup) {
+      console.log(`          🗔 PDF en nueva pestaña: ${popup.url()}`)
+      await popup.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+      const pdfRes = await popup.waitForResponse(
+        r => r.headers()['content-type']?.includes('pdf') || r.url().includes('.pdf'),
+        { timeout: 5000 }
+      ).catch(() => null)
+      if (pdfRes?.ok()) {
+        pdfBuffer = await pdfRes.body()
+        pdfUrl    = pdfRes.url()
+        console.log(`          📡 PDF via popup (${pdfBuffer.length} bytes)`)
       } else {
-        // Estrategia 2: el botón navega en la misma pestaña o tiene href directo
-        if (btnHref && btnHref !== '#' && !btnHref.startsWith('javascript')) {
-          const fullUrl = btnHref.startsWith('http') ? btnHref : new URL(btnHref, 'https://scw.pjn.gov.ar').href
-          console.log(`          🔗 Navegando directo: ${fullUrl}`)
-          const navRes = await page.goto(fullUrl, { waitUntil: 'commit', timeout: 15000 }).catch(() => null)
-          if (navRes?.ok()) {
-            const ct = navRes.headers()['content-type'] || ''
-            if (ct.includes('pdf') || ct.includes('octet-stream')) {
-              pdfBuffer = await navRes.body()
-              pdfUrl    = fullUrl
-              console.log(`          📡 PDF via navegación (${pdfBuffer.length} bytes)`)
-            }
-          }
-        } else {
-          console.log(`          ⚠️  Sin popup ni download — href inválido`)
+        pdfUrl = popup.url()
+        if (pdfUrl && pdfUrl !== 'about:blank') {
+          const arr = await popup.evaluate(async url => {
+            const r = await fetch(url, { credentials: 'include' })
+            if (!r.ok) return null
+            return Array.from(new Uint8Array(await r.arrayBuffer()))
+          }, pdfUrl).catch(() => null)
+          if (arr) pdfBuffer = Buffer.from(arr)
         }
       }
+      await popup.close().catch(() => {})
     } else {
-      console.log(`          ⚠️  Sin botón Descargar en el viewer`)
+      console.log(`          ⚠️  Sin popup ni download event`)
     }
 
     if (!pdfBuffer || pdfBuffer.length < 100) {
@@ -354,15 +273,19 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
 }
 
 // ── Extraer actuaciones del Libro Digital ─────────────────────────
+// FASE 1: recolectar todos los items del panel izquierdo (sin clickear)
+// FASE 2: clickear cada item y descargar su documento
 async function extraerActuacionesLibroDigital(page, nroExp) {
-  const todas  = []
-  let   pagina = 1
+  const libroUrl = page.url()
+
+  // ── FASE 1: recolectar metadata de todas las páginas ──────────────
+  const todosItems = []
+  let pagina = 1
 
   while (true) {
     console.log(`      📄 Página ${pagina}...`)
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
 
-    // Log HTML para debug solo en pág 1
     if (pagina === 1) {
       const snip = await page.evaluate(() => {
         const b = document.body.innerHTML
@@ -374,53 +297,53 @@ async function extraerActuacionesLibroDigital(page, nroExp) {
 
     const items = await encontrarItemsPanel(page)
     console.log(`         ${items.length} actuaciones encontradas`)
-
     if (items.length === 0 && pagina === 1) {
       const txt = await page.evaluate(() => document.body.innerText)
       console.log(`         Texto body: ${txt.substring(0, 600)}`)
     }
+    todosItems.push(...items)
 
-    // Para cada actuación: clickear la fila y bajar el documento
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      console.log(`        🖱️  [${i+1}/${items.length}] ${item.fecha} — ${item.descripcion.substring(0, 50)}`)
-
-      const urlBlob = await descargarDocumentoActuacion(
-        page,
-        item,
-        nroExp.replace(/\s/g, '_'),
-        item.fecha,
-        i
-      )
-      todas.push({ ...item, urlBlob })
-
-      // Pausa entre clicks para no romper la sesión JSF
-      await page.waitForTimeout(2000)
-    }
-
-    // Paginación
-    const hayNext = await page.evaluate((pag) => {
-      return [...document.querySelectorAll('a, button, span[onclick], td[onclick]')].some(el => {
+    // Paginación: solo buscar en el contenedor del panel izquierdo (tblSelActuaciones)
+    // para no confundir con los botones Anterior/Siguiente del viewer
+    const nextId = await page.evaluate((pag) => {
+      const panel = document.getElementById('libroDigitalForm:tblSelActuaciones') || document.body
+      const links = [...panel.querySelectorAll('a, button, span[onclick]')]
+      const next = links.find(el => {
         const t = (el.textContent || '').trim()
-        return t === String(pag + 1) || t.toLowerCase().includes('siguiente') || t === '>' || t === '>>'
+        // Solo números de página — NO "Siguiente" (que puede ser del viewer)
+        return t === String(pag + 1)
       })
+      return next?.id || null
     }, pagina)
 
-    if (!hayNext) break
+    if (!nextId) break
 
-    const nextEl = await page.$(
-      `a:text-is("${pagina + 1}"), button:text-is("${pagina + 1}"), ` +
-      `a:has-text("Siguiente"), a:has-text(">"), span:has-text("Siguiente")`
-    )
-    if (!nextEl) break
-
-    await nextEl.click()
-    await page.waitForTimeout(2500)
+    // Usar Playwright locator para click con ID escapado
+    await page.locator(`[id="${nextId}"]`).click()
+    await page.waitForTimeout(2000)
     pagina++
-    if (pagina > 30) break
+    if (pagina > 50) break
   }
 
-  return todas
+  console.log(`      📊 Total: ${todosItems.length} actuaciones en ${pagina} página(s)`)
+
+  // ── FASE 2: descargar documentos clickeando cada item ────────────
+  const resultado = []
+  for (let i = 0; i < todosItems.length; i++) {
+    const item = todosItems[i]
+    console.log(`        🖱️  [${i+1}/${todosItems.length}] ${item.fecha} — ${item.descripcion.substring(0, 50)}`)
+
+    // Volver al libro digital si nos fuimos (por descarga previa)
+    if (!page.url().includes('libroDigital.seam')) {
+      await page.goto(libroUrl, { waitUntil: 'networkidle', timeout: 20000 }).catch(() => {})
+    }
+
+    const urlBlob = await descargarDocumentoActuacion(page, item, nroExp.replace(/\s/g, '_'), item.fecha, i)
+    resultado.push({ ...item, urlBlob })
+    await page.waitForTimeout(1500)
+  }
+
+  return resultado
 }
 
 // ── Guardar actuaciones en DB ─────────────────────────────────────
