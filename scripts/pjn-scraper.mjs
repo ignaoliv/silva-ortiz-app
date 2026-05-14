@@ -159,7 +159,8 @@ async function extraerActuacionesExpediente(page, nroExp, idPjnExp) {
       ORDER BY fecha DESC, id DESC
     `)
     if (inDB.length > 0) {
-      const dbFecha   = String(inDB[0].fecha).split('T')[0]
+      const raw       = inDB[0].fecha
+      const dbFecha   = raw instanceof Date ? raw.toISOString().split('T')[0] : String(raw).split('T')[0]
       const dbDetalle = (inDB[0].detalle || '').substring(0, 60)
       const pageDesc  = latestOnPage.descripcion.substring(0, 60)
       if (dbFecha === latestISO && dbDetalle === pageDesc) {
