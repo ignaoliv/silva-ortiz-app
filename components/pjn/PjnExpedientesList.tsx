@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { DBPjnExpediente } from '@/lib/queries'
 import PjnActuacionesPanel from './PjnActuacionesPanel'
+import PjnResumen from './PjnResumen'
 import { ChevronDown, ChevronRight, ExternalLink, LinkIcon } from 'lucide-react'
 
 interface Props {
@@ -87,9 +88,10 @@ export default function PjnExpedientesList({ expedientes }: Props) {
             </a>
           </button>
 
-          {/* Panel de actuaciones */}
+          {/* Panel expandido */}
           {expanded === exp.id && (
             <div className="border-t border-so-border">
+              <PjnResumen idExpediente={exp.id} nro={exp.nro} caratula={exp.caratula} />
               <PjnActuacionesPanel idExpediente={exp.id} />
             </div>
           )}
