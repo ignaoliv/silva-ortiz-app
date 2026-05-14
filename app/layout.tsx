@@ -8,6 +8,10 @@ import { authOptions } from '@/lib/auth'
 export const metadata: Metadata = {
   title: 'Silva Ortiz Abogados',
   description: 'Sistema de gestión de expedientes legales',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
