@@ -91,9 +91,9 @@ async function dbQuery(q) {
 // ── Helpers ───────────────────────────────────────────────────────
 function parseDate(str) {
   if (!str) return null
-  const [d, m, y] = str.trim().split('/')
-  if (!d || !m || !y) return null
-  return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`
+  const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+  if (!m) return null
+  return `${m[3]}-${m[2]}-${m[1]}`
 }
 
 function esc(s, max = 499) {
@@ -133,26 +133,53 @@ async function descargarPorHref(page, href, nroExp, fecha, idx) {
 
 // ── Extraer actuaciones desde expediente.seam ────────────────────
 // Tabla: id="expediente:action-table"
-// Botón descarga: <a href="/scw/viewer.seam?id=...&download=true" target="_blank">
-async function extraerActuacionesExpediente(page, nroExp) {
-  // Actuaciones ES el tab por defecto en expediente.seam (value="actuaciones")
-  // La tabla ya está en el DOM — solo esperamos que esté lista
+// Columnas: 0=botón-descarga | 1=OFICINA | 2=FECHA | 3=TIPO | 4=DESCRIPCION | 5=FOJAS
+async function extraerActuacionesExpediente(page, nroExp, idPjnExp) {
   await page.waitForSelector('[id="expediente:action-table"]', { timeout: 15000 }).catch(() => {})
   await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
 
-  const tblFound = await page.evaluate(() => !!document.getElementById('expediente:action-table'))
-  console.log(`      🗂️  Tabla action-table encontrada: ${tblFound}`)
+  // ── Optimización: si la última actuación ya está en DB, saltear ─
+  const latestOnPage = await page.evaluate(() => {
+    function celda(td) {
+      if (!td) return ''
+      const span = td.querySelector('.font-color-black')
+      return (span ? span.textContent : td.textContent).trim()
+    }
+    const firstRow = document.querySelector('[id="expediente:action-table"] tbody tr')
+    if (!firstRow) return null
+    const cells = [...firstRow.querySelectorAll('td')]
+    return { fecha: celda(cells[2]), descripcion: celda(cells[4]) }
+  })
 
-  // Leer todas las páginas de la tabla de actuaciones
-  // Columnas: 0=botón-descarga | 1=OFICINA | 2=FECHA | 3=TIPO | 4=DESCRIPCION | 5=FOJAS
-  // Cada celda tiene <span class="sr-only">Label: </span><span class="font-color-black">valor</span>
+  if (latestOnPage?.fecha && idPjnExp) {
+    const latestISO = parseDate(latestOnPage.fecha)
+    const inDB = await dbQuery(`
+      SELECT TOP 1 fecha, detalle FROM pjn_actuaciones
+      WHERE id_pjn_expediente = ${idPjnExp}
+      ORDER BY fecha DESC, id DESC
+    `)
+    if (inDB.length > 0) {
+      const dbFecha   = String(inDB[0].fecha).split('T')[0]
+      const dbDetalle = (inDB[0].detalle || '').substring(0, 60)
+      const pageDesc  = latestOnPage.descripcion.substring(0, 60)
+      if (dbFecha === latestISO && dbDetalle === pageDesc) {
+        console.log(`      ⏭️  Sin cambios desde ${latestOnPage.fecha}, saltando`)
+        return []
+      }
+    }
+  }
+
+  // ── Leer filas de la tabla actual ───────────────────────────────
   function leerFilasActuaciones() {
     return page.evaluate(() => {
       function celda(td) {
         if (!td) return ''
-        // Preferir el span con valor real (font-color-black) si existe
-        const span = td.querySelector('.font-color-black')
-        return (span ? span.textContent : td.textContent).trim()
+        // Preferir span con clase real; si no, excluir sr-only y unir el resto
+        const real = td.querySelector('.font-color-black')
+        if (real) return real.textContent.trim()
+        return [...td.querySelectorAll('span:not(.sr-only)')]
+          .map(s => s.textContent.trim()).filter(Boolean).join(' ')
+          || td.textContent.replace(/[A-Za-záéíóúñÁÉÍÓÚÑ]+:\s*/g, '').trim()
       }
       const tbl = document.getElementById('expediente:action-table')
       if (!tbl) return []
@@ -174,35 +201,53 @@ async function extraerActuacionesExpediente(page, nroExp) {
     })
   }
 
+  // ── Paginación: navegar por número de página ─────────────────────
+  // La paginación usa links numerados (<a>2</a>, <a>3</a>, etc.) dentro de divPagesAct
   const items = []
   let actPag = 1
   while (true) {
     const batch = await leerFilasActuaciones()
     items.push(...batch)
-    // Paginación: botón siguiente en divPagesAct — usar locator (no ElementHandle)
-    const nextLocator = page.locator('[id*="divPagesAct"] a[id*="next"]:not([class*="dis"]), [id*="divPagesAct"] span[id*="next"]:not([class*="dis"])')
-    const hasNext = await nextLocator.count() > 0
+    // Buscar link con el número de la siguiente página
+    const nextPageLocator = page.locator(`[id*="divPagesAct"] li:not(.active) a`).filter({ hasText: String(actPag + 1) })
+    const hasNext = await nextPageLocator.count() > 0
     if (!hasNext || actPag >= 30) break
-    await nextLocator.first().click()
+    await nextPageLocator.first().click()
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(800)
     actPag++
   }
 
   console.log(`      📊 ${items.length} actuaciones en ${actPag} página(s)`)
-  if (items.length === 0) {
-    const txt = await page.evaluate(() => document.body.innerText.substring(0, 300))
-    console.log(`      📄 Body: ${txt}`)
-  }
 
-  // Descargar documentos
+  // ── Descargar PDF solo para actuaciones nuevas (no están en DB) ──
   const resultado = []
   for (let i = 0; i < items.length; i++) {
-    const item = items[i]
-    console.log(`        📄 [${i+1}/${items.length}] ${item.fecha} — ${item.descripcion.substring(0, 60)}${item.dlHref ? ' ⬇️' : ''}`)
+    const item     = items[i]
+    const fechaISO = parseDate(item.fecha)
+    const detEsc   = esc(item.descripcion, 999)
 
-    let urlBlob = null
-    if (item.dlHref) {
+    // Verificar si ya existe en DB
+    const exists = fechaISO ? await dbQuery(`
+      SELECT url_blob FROM pjn_actuaciones
+      WHERE id_pjn_expediente = ${idPjnExp}
+        AND fecha   = '${fechaISO}'
+        AND detalle = '${detEsc}'
+    `).catch(() => []) : []
+
+    const yaEnDB   = exists.length > 0
+    const yaBlob   = exists[0]?.url_blob
+
+    if (yaEnDB && yaBlob) {
+      // Ya existe con PDF — no hacer nada
+      resultado.push({ ...item, urlBlob: yaBlob })
+      continue
+    }
+
+    console.log(`        📄 [${i+1}/${items.length}] ${item.fecha} — ${item.descripcion.substring(0, 55)}${item.dlHref ? ' ⬇️' : ''}${yaEnDB ? ' (sin PDF)' : ' 🆕'}`)
+
+    let urlBlob = yaBlob || null
+    if (item.dlHref && !yaBlob) {
       urlBlob = await descargarPorHref(page, item.dlHref, nroExp, item.fecha, i)
       await page.waitForTimeout(500)
     }
@@ -456,7 +501,7 @@ async function main() {
 
         // Extraer y guardar actuaciones
         try {
-          const acts   = await extraerActuacionesExpediente(page, fila.nro)
+          const acts   = await extraerActuacionesExpediente(page, fila.nro, idPjnExp)
           const nuevas = await guardarActuaciones(idPjnExp, acts)
           console.log(`    ✅ ${acts.length} actuaciones, ${nuevas} nuevas`)
           actCount += nuevas
