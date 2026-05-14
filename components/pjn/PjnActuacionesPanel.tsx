@@ -21,6 +21,24 @@ function tipoColor(tipo: string) {
   return TIPO_COLOR[k] ?? 'bg-so-surface text-so-muted border-so-border'
 }
 
+// YYYY-MM-DD → DD/MM/AAAA
+function formatFecha(iso: string) {
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return iso
+  return `${d}/${m}/${y}`
+}
+
+// Parsear detalle: "TÍTULO [Presentado DD/MM/AAAA HH:MM] descripción..."
+function parseDetalle(detalle: string) {
+  const match = detalle.match(/^(.*?)\[Presentado\s+(\d{2}\/\d{2}\/\d{4}[^\]]*)\]\s*(.*)$/s)
+  if (!match) return { titulo: detalle, fechaPresentacion: null, descripcion: null }
+  return {
+    titulo:           match[1].trim(),
+    fechaPresentacion: match[2].trim(),
+    descripcion:      match[3].trim() || null,
+  }
+}
+
 export default function PjnActuacionesPanel({ idExpediente }: Props) {
   const [actuaciones, setActuaciones] = useState<DBPjnActuacion[]>([])
   const [loading, setLoading]         = useState(true)
@@ -42,9 +60,7 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
     )
   }
 
-  if (error) {
-    return <p className="text-xs text-red-400 px-5 py-4">{error}</p>
-  }
+  if (error) return <p className="text-xs text-red-400 px-5 py-4">{error}</p>
 
   if (actuaciones.length === 0) {
     return (
@@ -56,57 +72,82 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
 
   return (
     <div className="divide-y divide-so-border/50">
-      {/* Header de columnas */}
-      <div className="grid grid-cols-[80px_90px_1fr_80px] gap-4 px-5 py-2 bg-so-surface/30">
+      {/* Header */}
+      <div className="grid grid-cols-[70px_100px_1fr_70px] gap-4 px-5 py-2 bg-so-surface/30">
         <span className="text-[10px] uppercase tracking-wider text-so-muted">Tipo</span>
         <span className="text-[10px] uppercase tracking-wider text-so-muted">Fecha</span>
         <span className="text-[10px] uppercase tracking-wider text-so-muted">Detalle</span>
         <span className="text-[10px] uppercase tracking-wider text-so-muted text-right">Doc</span>
       </div>
 
-      {actuaciones.map(act => (
-        <div key={act.id} className="grid grid-cols-[80px_90px_1fr_80px] gap-4 px-5 py-3 hover:bg-so-surface/30 transition-colors items-start">
-          {/* Tipo */}
-          <div>
-            {act.tipo ? (
-              <span className={`inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tipoColor(act.tipo)}`}>
-                {act.tipo.substring(0, 15)}
+      {actuaciones.map(act => {
+        const { titulo, fechaPresentacion, descripcion } = parseDetalle(act.detalle)
+
+        return (
+          <div key={act.id} className="grid grid-cols-[70px_100px_1fr_70px] gap-4 px-5 py-3.5 hover:bg-so-surface/30 transition-colors items-start">
+            {/* Tipo */}
+            <div className="pt-0.5">
+              {act.tipo ? (
+                <span className={`inline-flex items-center justify-center text-[10px] font-bold w-6 h-6 rounded-full border ${tipoColor(act.tipo)}`}>
+                  {act.tipo.trim().charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <span className="text-[10px] text-so-muted">—</span>
+              )}
+            </div>
+
+            {/* Fecha actuación */}
+            <div className="pt-0.5">
+              <span className="text-xs font-medium text-so-text tabular-nums">
+                {formatFecha(act.fecha)}
               </span>
-            ) : (
-              <span className="text-[10px] text-so-muted">—</span>
-            )}
-          </div>
+              {act.fojas && (
+                <p className="text-[10px] text-so-muted mt-0.5">fs. {act.fojas}</p>
+              )}
+            </div>
 
-          {/* Fecha */}
-          <div>
-            <span className="text-xs text-so-textMid font-mono">{act.fecha}</span>
-            {act.fojas && (
-              <p className="text-[10px] text-so-muted mt-0.5">fs. {act.fojas}</p>
-            )}
-          </div>
+            {/* Detalle estructurado */}
+            <div className="space-y-1 min-w-0">
+              {/* Título */}
+              {titulo && (
+                <p className="text-xs font-semibold text-so-text leading-snug">{titulo}</p>
+              )}
+              {/* Fecha de presentación */}
+              {fechaPresentacion && (
+                <p className="text-[10px] text-so-muted">
+                  Presentado: <span className="text-so-textMid">{fechaPresentacion}</span>
+                </p>
+              )}
+              {/* Descripción */}
+              {descripcion && (
+                <p className="text-[11px] text-so-textMid leading-relaxed">{descripcion}</p>
+              )}
+              {/* Si no había patrón, mostrar todo */}
+              {!fechaPresentacion && !titulo && (
+                <p className="text-xs text-so-text leading-relaxed">{act.detalle}</p>
+              )}
+            </div>
 
-          {/* Detalle */}
-          <p className="text-xs text-so-text leading-relaxed">{act.detalle}</p>
-
-          {/* Documento */}
-          <div className="flex justify-end">
-            {act.urlBlob ? (
-              <a
-                href={act.urlBlob}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[10px] text-so-red hover:text-so-redLight transition-colors font-medium"
-                title="Descargar PDF"
-              >
-                <Download size={12} />
-                PDF
-              </a>
-            ) : (
-              <FileText size={12} className="text-so-border" />
-            )}
+            {/* Documento */}
+            <div className="flex justify-end pt-0.5">
+              {act.urlBlob ? (
+                <a
+                  href={act.urlBlob}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] text-so-red hover:text-so-redLight transition-colors font-medium"
+                  title="Descargar PDF"
+                >
+                  <Download size={12} />
+                  PDF
+                </a>
+              ) : (
+                <FileText size={12} className="text-so-border" />
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
