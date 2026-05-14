@@ -291,24 +291,39 @@ async function main() {
         console.log('  ✅ Filtro LETRADO')
       }
 
-      // ── 3. Extraer datos de la tabla de expedientes ──────────
-      const filas = await page.evaluate(() => {
-        const rows = []
-        const tds  = [...document.querySelectorAll('td')]
-        for (let i = 0; i < tds.length; i++) {
-          const txt = tds[i].textContent.trim()
-          if (/^[A-Z]{2,4}\s+\d+\/\d{4}$/.test(txt)) {
-            rows.push({
-              nro:        txt,
-              dependencia: tds[i+1]?.textContent.trim() || '',
-              caratula:    tds[i+2]?.textContent.trim() || '',
-              situacion:   tds[i+3]?.textContent.trim() || '',
-              ultima_act:  tds[i+4]?.textContent.trim() || '',
-            })
-          }
-        }
-        return rows
-      })
+      // ── 3. Extraer datos de la tabla con paginación ──────────
+      // Tabla: tablaConsultaLista:tablaConsultaForm:j_idt179:dataTable
+      // Columnas <td class="column">: nro | dependencia | carátula | situación | últ.act
+      const leerFilasTabla = () => page.evaluate(() => {
+          const tbl = document.querySelector('[id*="dataTable"]')
+          if (!tbl) return []
+          return [...tbl.querySelectorAll('tbody tr')].map(tr => {
+            const cols = [...tr.querySelectorAll('td.column')]
+            if (cols.length < 4) return null
+            const nro = cols[0]?.textContent.trim()
+            if (!/^[A-Z]{2,4}\s+\d+\/\d{4}$/.test(nro)) return null
+            return {
+              nro,
+              dependencia: cols[1]?.textContent.trim() || '',
+              caratula:    cols[2]?.textContent.trim() || '',
+              situacion:   cols[3]?.textContent.trim() || '',
+              ultima_act:  cols[4]?.textContent.trim() || '',
+            }
+          }).filter(Boolean)
+        })
+
+      const filas = []
+      let listPag = 1
+      while (true) {
+        const batch = await leerFilasTabla()
+        filas.push(...batch)
+        // Buscar botón "siguiente página" en la paginación de la tabla
+        const nextPag = await page.$('.pagination li:not(.disabled) a[aria-label="Next"], .pagination a:has(span[aria-hidden="true"]:text-is("»")), .rf-ds-btn-next:not(.rf-ds-dis)')
+        if (!nextPag || listPag >= 20) break
+        await nextPag.click()
+        await page.waitForLoadState('networkidle', { timeout: 15000 })
+        listPag++
+      }
 
       console.log(`  📁 ${filas.length} expediente(s)`)
 
