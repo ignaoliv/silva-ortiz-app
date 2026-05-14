@@ -8,17 +8,29 @@ interface Props {
   idExpediente: number
 }
 
-const TIPO_COLOR: Record<string, string> = {
-  E: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  D: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  C: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  O: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  P: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+// Mapeo por keyword del tipo completo (ej: "ESCRITO AGREGADO", "FIRMA DESPACHO", etc.)
+function tipoColor(tipo: string) {
+  const t = tipo.trim().toUpperCase()
+  if (t.includes('ESCRITO') || t === 'E')          return 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+  if (t.includes('DESPACHO') || t.includes('FIRMA') || t === 'D') return 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+  if (t.includes('CEDULA') || t === 'C')           return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+  if (t.includes('OFICIO') || t === 'O')           return 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+  if (t.includes('SENTENCIA') || t.includes('PUBLICACION') || t === 'P') return 'bg-pink-500/10 text-pink-400 border-pink-500/20'
+  if (t.includes('MOVIMIENTO'))                    return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+  return 'bg-so-surface text-so-muted border-so-border'
 }
 
-function tipoColor(tipo: string) {
-  const k = tipo.trim().charAt(0).toUpperCase()
-  return TIPO_COLOR[k] ?? 'bg-so-surface text-so-muted border-so-border'
+// Abreviatura para el badge (máx 2 letras)
+function tipoLabel(tipo: string) {
+  const t = tipo.trim().toUpperCase()
+  if (t.includes('ESCRITO'))    return 'ES'
+  if (t.includes('DESPACHO'))   return 'DE'
+  if (t.includes('CEDULA'))     return 'CE'
+  if (t.includes('OFICIO'))     return 'OF'
+  if (t.includes('SENTENCIA') || t.includes('PUBLICACION')) return 'SE'
+  if (t.includes('MOVIMIENTO')) return 'MV'
+  if (t.includes('FIRMA'))      return 'FI'
+  return t.charAt(0)
 }
 
 // YYYY-MM-DD → DD/MM/AAAA
@@ -88,8 +100,11 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
             {/* Tipo */}
             <div className="pt-0.5">
               {act.tipo ? (
-                <span className={`inline-flex items-center justify-center text-[10px] font-bold w-6 h-6 rounded-full border ${tipoColor(act.tipo)}`}>
-                  {act.tipo.trim().charAt(0).toUpperCase()}
+                <span
+                  title={act.tipo}
+                  className={`inline-flex items-center justify-center text-[9px] font-bold px-1.5 h-5 rounded border ${tipoColor(act.tipo)}`}
+                >
+                  {tipoLabel(act.tipo)}
                 </span>
               ) : (
                 <span className="text-[10px] text-so-muted">—</span>
