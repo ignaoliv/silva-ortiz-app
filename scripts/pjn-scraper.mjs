@@ -150,36 +150,15 @@ async function encontrarItemsPanel(page) {
   })
 }
 
-// ── Descargar PDF que se carga en el panel derecho al clickear una fila ─
+// ── Descargar PDF via viewer del panel derecho ───────────────────────────────
 async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
   try {
     let pdfBuffer = null
     let pdfUrl    = null
 
-    // Capturar TODAS las requests que se hagan tras el click (para debug)
-    const requestsLog = []
-    const onReq = req => requestsLog.push({ url: req.url(), ct: req.headers()['content-type'] || '' })
-    page.on('request', onReq)
-
-    // Interceptar respuestas con PDF
-    const responsePromise = page.waitForResponse(
-      res => {
-        const ct  = res.headers()['content-type'] || ''
-        const url = res.url()
-        return ct.includes('pdf') || url.includes('.pdf') ||
-               url.includes('verDocumento') || url.includes('getDoc') ||
-               url.includes('descargar') || url.includes('download')
-      },
-      { timeout: 10000 }
-    ).catch(() => null)
-
-    // Click en la fila (JSF usa IDs con ":" que rompen querySelector → usar getElementById)
+    // 1. Click en la fila del panel izquierdo (JSF IDs con ":" → getElementById)
     await page.evaluate(({ domId, domIdx }) => {
-      let el
-      if (domId) {
-        // getElementById no necesita escapar caracteres especiales
-        el = document.getElementById(domId)
-      }
+      let el = domId ? document.getElementById(domId) : null
       if (!el) {
         const todos = [...document.querySelectorAll('div, td, li, tr, span')].filter(e =>
           /\d{2}\/\d{2}\/\d{4}/.test(e.textContent || '') &&
@@ -191,70 +170,65 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
       if (el) el.click()
     }, { domId: item.domId, domIdx: idx })
 
-    const response = await responsePromise
-    page.off('request', onReq)
+    // 2. Esperar que el AJAX de JSF/RichFaces cargue el viewer en el panel derecho
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
+    await page.waitForTimeout(1500)
 
-    // Log de requests para diagnóstico
-    const interesantes = requestsLog.filter(r =>
-      !r.url.includes('.js') && !r.url.includes('.css') && !r.url.includes('.png') &&
-      !r.url.includes('.gif') && !r.url.includes('javax.faces.resource')
-    )
-    console.log(`          Requests post-click: ${interesantes.map(r => r.url.split('?')[0].split('/').slice(-2).join('/')).join(' | ')}`)
+    // 3. Buscar el botón "Descargar" en el viewer e interceptar el PDF
+    const dlSelectors = [
+      'a:has-text("Descargar")',
+      'button:has-text("Descargar")',
+      'a:has-text("descargar")',
+      'input[value*="escargar"]',
+      'a[title*="escargar"]',
+      'a[id*="escargar"]',
+      '[id*="descargar"]',
+      '[id*="download"]',
+      'a[href*="descargar"]',
+      'a[href*="download"]',
+    ]
 
-    if (response && response.ok()) {
-      pdfUrl    = response.url()
-      pdfBuffer = await response.body()
-      console.log(`          📡 PDF interceptado (${pdfBuffer.length} bytes): ${pdfUrl.split('?')[0]}`)
+    let dlBtn = null
+    for (const sel of dlSelectors) {
+      dlBtn = await page.$(sel)
+      if (dlBtn) { console.log(`          🔘 Botón encontrado: ${sel}`); break }
     }
 
-    // Fallback 1: buscar iframe/embed/object en el panel derecho
-    if (!pdfBuffer) {
-      await page.waitForTimeout(2500)
-      const panelInfo = await page.evaluate(() => {
-        // Buscar cualquier iframe o embed que tenga un src
-        const iframes = [...document.querySelectorAll('iframe')].map(f => f.src || f.getAttribute('src')).filter(Boolean)
-        const embeds  = [...document.querySelectorAll('embed, object')].map(f => f.src || f.data || f.getAttribute('src') || f.getAttribute('data')).filter(Boolean)
-        // Buscar links de descarga en el panel derecho
-        const links   = [...document.querySelectorAll('a[href*="pdf"], a[href*="Doc"], a[href*="descargar"], a[href*="download"]')].map(a => a.href).filter(Boolean)
-        // Log del panel derecho para debug
-        const panel   = document.querySelector('.rich-panel-body, .panel-right, [id*="panelDerecho"], [id*="right"], [id*="documento"]')
-        const panelHtml = panel ? panel.innerHTML.substring(0, 400) : ''
-        return { iframes, embeds, links, panelHtml }
-      })
+    if (dlBtn) {
+      // Interceptar la respuesta PDF al clickear Descargar
+      const dlPromise = page.waitForResponse(
+        res => {
+          const ct  = res.headers()['content-type'] || ''
+          const url = res.url()
+          return ct.includes('pdf') || ct.includes('octet-stream') ||
+                 url.includes('.pdf') || url.includes('descargar') || url.includes('download')
+        },
+        { timeout: 15000 }
+      ).catch(() => null)
 
-      console.log(`          Panel derecho — iframes: ${panelInfo.iframes.join(',')} | embeds: ${panelInfo.embeds.join(',')} | links: ${panelInfo.links.join(',')}`)
-      if (panelInfo.panelHtml) console.log(`          Panel HTML: ${panelInfo.panelHtml.substring(0, 200)}`)
+      await dlBtn.click()
+      const dlRes = await dlPromise
 
-      pdfUrl = panelInfo.iframes[0] || panelInfo.embeds[0] || panelInfo.links[0] || null
-
-      if (pdfUrl) {
-        if (!pdfUrl.startsWith('http')) pdfUrl = new URL(pdfUrl, 'https://scw.pjn.gov.ar').href
-        pdfBuffer = await page.evaluate(async (url) => {
-          const r = await fetch(url, { credentials: 'include' })
-          if (!r.ok) return null
-          const buf = await r.arrayBuffer()
-          return Array.from(new Uint8Array(buf))
-        }, pdfUrl)
-        if (pdfBuffer) pdfBuffer = Buffer.from(pdfBuffer)
-      }
-    }
-
-    // Fallback 2: buscar botón "Ver" o "Descargar" y hacer click
-    if (!pdfBuffer) {
-      const dlBtn = await page.$('a:has-text("Descargar"), a:has-text("Ver documento"), button:has-text("Descargar"), a[title*="escargar"], a[title*="er"]')
-      if (dlBtn) {
-        console.log(`          🔘 Botón descarga encontrado, haciendo click...`)
-        const dlPromise = page.waitForResponse(
-          res => res.headers()['content-type']?.includes('pdf') || res.url().includes('.pdf'),
-          { timeout: 8000 }
-        ).catch(() => null)
-        await dlBtn.click()
-        const dlRes = await dlPromise
-        if (dlRes?.ok()) {
-          pdfBuffer = await dlRes.body()
-          pdfUrl    = dlRes.url()
+      if (dlRes?.ok()) {
+        pdfBuffer = await dlRes.body()
+        pdfUrl    = dlRes.url()
+        console.log(`          📡 PDF descargado (${pdfBuffer.length} bytes)`)
+      } else {
+        // Si no interceptamos respuesta, intentar con la URL del botón directamente
+        const href = await dlBtn.getAttribute('href').catch(() => null)
+        if (href && href !== '#') {
+          const fullUrl = href.startsWith('http') ? href : new URL(href, 'https://scw.pjn.gov.ar').href
+          pdfBuffer = await page.evaluate(async (url) => {
+            const r = await fetch(url, { credentials: 'include' })
+            if (!r.ok) return null
+            const buf = await r.arrayBuffer()
+            return Array.from(new Uint8Array(buf))
+          }, fullUrl)
+          if (pdfBuffer) { pdfBuffer = Buffer.from(pdfBuffer); pdfUrl = fullUrl }
         }
       }
+    } else {
+      console.log(`          ⚠️  Sin botón Descargar en el viewer`)
     }
 
     if (!pdfBuffer || pdfBuffer.length < 100) {
