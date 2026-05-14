@@ -366,6 +366,14 @@ export async function getPjnActuaciones(idExpediente: number): Promise<DBPjnActu
   }))
 }
 
+export async function hasPjnCredentials(email: string): Promise<boolean> {
+  const rows = await query<{ n: number }>(`
+    SELECT COUNT(*) AS n FROM pjn_credenciales
+    WHERE email_usuario = '${email.replace(/'/g, "''")}' AND pjn_password_enc IS NOT NULL
+  `)
+  return (rows?.[0]?.n ?? 0) > 0
+}
+
 export async function getPjnSyncLog(): Promise<{ fechaInicio: string; estado: string; expedientes: number; actuacionesNew: number; error: string | null }[]> {
   const rows = await query<Record<string, unknown>>(`
     SELECT TOP 5 fecha_inicio, estado, expedientes, actuaciones_new, error
