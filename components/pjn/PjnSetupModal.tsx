@@ -9,7 +9,6 @@ export default function PjnSetupModal() {
   const router = useRouter()
 
   useEffect(() => {
-    // Mostrar modal después de 800ms para no ser intrusivo
     const t = setTimeout(() => setOpen(true), 800)
     return () => clearTimeout(t)
   }, [])
@@ -17,80 +16,82 @@ export default function PjnSetupModal() {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="relative w-full max-w-md bg-so-card border border-so-ash/40 shadow-2xl overflow-hidden">
-        {/* Franja superior de acento */}
-        <div className="h-1 w-full bg-so-ash" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="relative w-full max-w-sm bg-so-card border border-so-border shadow-2xl overflow-hidden">
+
+        {/* Franja superior */}
+        <div className="h-0.5 w-full bg-so-ash" />
 
         {/* Header */}
-        <div className="flex items-start justify-between px-6 pt-5 pb-0">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-so-border">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 flex items-center justify-center bg-so-ash/15 border border-so-ash/30">
-              <ShieldAlert size={18} className="text-so-ash" />
+            <div className="w-8 h-8 flex items-center justify-center bg-so-ash/10 border border-so-ash/25 flex-shrink-0">
+              <ShieldAlert size={15} className="text-so-ash" />
             </div>
             <div>
-              <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-so-ash">
+              <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-so-ash leading-none mb-0.5">
                 Acción requerida
               </p>
-              <h2 className="text-sm font-heading font-semibold text-so-text leading-tight">
+              <h2 className="text-[15px] font-semibold text-so-text leading-tight" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
                 Configurá tu acceso al PJN
               </h2>
             </div>
           </div>
           <button
             onClick={() => setOpen(false)}
-            className="text-so-muted hover:text-so-text transition-colors p-1"
+            className="text-so-muted hover:text-so-text transition-colors flex-shrink-0"
           >
-            <X size={16} />
+            <X size={14} />
           </button>
         </div>
 
         {/* Cuerpo */}
-        <div className="px-6 py-5 space-y-4">
-          <p className="text-sm text-so-textMid leading-relaxed">
-            Para sincronizar tus expedientes del Poder Judicial automáticamente, necesitás ingresar tus credenciales del portal PJN una sola vez.
+        <div className="px-5 py-4 space-y-4">
+          <p className="text-[13px] text-so-textMid leading-relaxed" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+            Ingresá tus credenciales del portal PJN una sola vez para sincronizar tus expedientes automáticamente.
           </p>
 
           {/* Beneficios */}
-          <div className="space-y-2.5 bg-so-surface border border-so-border p-4">
+          <div className="divide-y divide-so-border border border-so-border">
             {[
-              { icon: <FileText size={13} />,  label: 'Actuaciones automáticas', desc: 'Sin entrar al portal judicial' },
-              { icon: <RefreshCw size={13} />, label: 'Sincronización nocturna',  desc: 'Cada noche descargamos todo' },
-              { icon: <Sparkles size={13} />,  label: 'Resumen con IA',           desc: 'Claude analiza cada expediente' },
+              { icon: <FileText size={12} />,  label: 'Actuaciones automáticas', desc: 'Sin ingresar al portal judicial' },
+              { icon: <RefreshCw size={12} />, label: 'Sincronización nocturna',  desc: 'Descarga diaria de novedades'   },
+              { icon: <Sparkles size={12} />,  label: 'Análisis con IA',          desc: 'Claude resume cada expediente'  },
             ].map(({ icon, label, desc }) => (
-              <div key={label} className="flex items-center gap-3">
+              <div key={label} className="flex items-center gap-3 px-3.5 py-3 bg-so-surface">
                 <span className="text-so-ash flex-shrink-0">{icon}</span>
-                <div>
-                  <p className="text-xs font-medium text-so-text">{label}</p>
-                  <p className="text-[10px] text-so-muted">{desc}</p>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold text-so-text leading-none mb-0.5">{label}</p>
+                  <p className="text-[11px] text-so-muted leading-none">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Footer — acciones */}
-        <div className="flex items-center gap-3 px-6 pb-6">
-          {/* Botón principal fill-animation */}
+        {/* Footer */}
+        <div className="flex items-stretch gap-0 px-5 pb-5">
+          {/* Botón principal */}
           <button
             onClick={() => { setOpen(false); router.push('/perfil') }}
-            className="group relative overflow-hidden flex-1 flex items-center justify-center gap-2.5 py-3 border border-so-ash text-xs font-bold tracking-[0.15em] uppercase text-so-ash hover:text-white transition-colors duration-300"
+            className="group relative overflow-hidden flex-1 flex items-center justify-center gap-2 py-2.5 bg-so-ash text-white text-[11px] font-bold tracking-[0.14em] uppercase hover:bg-so-ashLight transition-colors duration-200"
           >
-            <span className="absolute inset-0 bg-so-ash scale-x-0 origin-left group-hover:scale-x-100 transition-transform duration-500 ease-[cubic-bezier(.4,0,.2,1)]" />
-            <span className="relative flex items-center gap-2">
-              Configurar ahora
-              <ArrowRight size={13} />
-            </span>
+            Configurar ahora
+            <ArrowRight size={12} />
           </button>
+
+          {/* Separador vertical */}
+          <div className="w-px bg-so-ashLight/30" />
 
           {/* Secundario */}
           <button
             onClick={() => setOpen(false)}
-            className="px-4 py-3 text-xs text-so-muted hover:text-so-text transition-colors border border-so-border hover:border-so-muted"
+            className="px-4 py-2.5 text-[11px] font-medium text-so-text bg-so-surface hover:bg-so-border transition-colors border-l-0"
           >
             Ahora no
           </button>
         </div>
+
       </div>
     </div>
   )
