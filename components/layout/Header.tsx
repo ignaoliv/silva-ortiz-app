@@ -4,9 +4,10 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import type { Session } from 'next-auth'
-import { LogOut, User } from 'lucide-react'
+import { LogOut, User, Sun, Moon } from 'lucide-react'
 import { initials } from '@/lib/utils'
 import { useState, useRef, useEffect } from 'react'
+import { useTheme } from 'next-themes'
 
 const NAV = [
   { href: '/expedientes', label: 'Expedientes' },
@@ -20,6 +21,9 @@ export default function Header({ user }: { user: Session['user'] }) {
   const router  = useRouter()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const { theme, setTheme, resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -68,6 +72,20 @@ export default function Header({ user }: { user: Session['user'] }) {
         <span className="text-[10px] tracking-widest uppercase text-so-muted hidden md:block">
           Sistema de gestión
         </span>
+
+        {/* Theme toggle */}
+        {mounted && (
+          <button
+            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            className="p-1.5 rounded text-so-muted hover:text-so-text hover:bg-so-surface transition-colors"
+            title={resolvedTheme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          >
+            {resolvedTheme === 'dark'
+              ? <Sun  size={14} />
+              : <Moon size={14} />
+            }
+          </button>
+        )}
 
         {/* User */}
         <div className="flex items-center gap-3 flex-shrink-0" ref={ref}>

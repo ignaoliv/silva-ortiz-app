@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss'
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,16 +10,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Silva Ortiz dark palette
         so: {
-          bg:       '#0b0b0b',
-          surface:  '#161616',
-          card:     '#1b1b1b',
-          border:   '#2a2a2a',
-          muted:    '#484848',
-          subtle:   '#636363',
-          text:     '#f8f8f8',
-          textMid:  '#9e9e9e',
+          bg:       'var(--so-bg)',
+          surface:  'var(--so-surface)',
+          card:     'var(--so-card)',
+          border:   'var(--so-border)',
+          muted:    'var(--so-muted)',
+          subtle:   'var(--so-subtle)',
+          text:     'var(--so-text)',
+          textMid:  'var(--so-textMid)',
           red:      '#82181a',
           redBright:'#e40014',
           redLight: '#ff6568',
@@ -32,7 +32,7 @@ const config: Config = {
         serif:   ['"Playfair Display"', 'Georgia', 'serif'],
       },
       letterSpacing: {
-        logo: '0.3em',
+        logo:  '0.3em',
         wide2: '0.15em',
       },
     },
