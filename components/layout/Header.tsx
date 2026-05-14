@@ -12,6 +12,7 @@ const NAV = [
   { href: '/expedientes', label: 'Expedientes' },
   { href: '/audiencias',  label: 'Audiencias'  },
   { href: '/clientes',    label: 'Clientes'    },
+  { href: '/pjn',         label: 'PJN'         },
 ]
 
 export default function Header({ user }: { user: Session['user'] }) {

@@ -302,3 +302,82 @@ export async function getKPIs(): Promise<DBKPIs> {
     audSemana: Number(r?.aud_semana) || 0,
   }
 }
+
+// ── PJN ───────────────────────────────────────────────────────────────────────
+
+export interface DBPjnExpediente {
+  id:          number
+  nro:         string
+  caratula:    string
+  dependencia: string
+  situacion:   string
+  ultimaAct:   string | null
+  idCaso:      number | null
+  fechaSync:   string
+}
+
+export interface DBPjnActuacion {
+  id:          number
+  idExpediente: number
+  fecha:       string
+  tipo:        string
+  detalle:     string
+  fojas:       string
+  urlBlob:     string | null
+}
+
+export async function getPjnExpedientes(email: string): Promise<DBPjnExpediente[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id, nro_expediente, caratula, dependencia, situacion,
+           ultima_act, id_caso, fecha_sync
+    FROM pjn_expedientes
+    WHERE email_usuario = '${email.replace(/'/g, "''")}'
+    ORDER BY fecha_sync DESC
+  `)
+  if (!rows) return []
+  return rows.map(r => ({
+    id:          r.id as number,
+    nro:         r.nro_expediente as string,
+    caratula:    r.caratula as string,
+    dependencia: r.dependencia as string,
+    situacion:   r.situacion as string,
+    ultimaAct:   r.ultima_act ? String(r.ultima_act).split('T')[0] : null,
+    idCaso:      r.id_caso as number | null,
+    fechaSync:   String(r.fecha_sync).split('T')[0],
+  }))
+}
+
+export async function getPjnActuaciones(idExpediente: number): Promise<DBPjnActuacion[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id, id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob
+    FROM pjn_actuaciones
+    WHERE id_pjn_expediente = ${idExpediente}
+    ORDER BY fecha DESC
+  `)
+  if (!rows) return []
+  return rows.map(r => ({
+    id:           r.id as number,
+    idExpediente: r.id_pjn_expediente as number,
+    fecha:        String(r.fecha).split('T')[0],
+    tipo:         r.tipo as string,
+    detalle:      r.detalle as string,
+    fojas:        r.fojas as string,
+    urlBlob:      r.url_blob as string | null,
+  }))
+}
+
+export async function getPjnSyncLog(): Promise<{ fechaInicio: string; estado: string; expedientes: number; actuacionesNew: number; error: string | null }[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT TOP 5 fecha_inicio, estado, expedientes, actuaciones_new, error
+    FROM pjn_sync_log
+    ORDER BY fecha_inicio DESC
+  `)
+  if (!rows) return []
+  return rows.map(r => ({
+    fechaInicio:   String(r.fecha_inicio).split('T')[0],
+    estado:        r.estado as string,
+    expedientes:   Number(r.expedientes),
+    actuacionesNew: Number(r.actuaciones_new),
+    error:         r.error as string | null,
+  }))
+}
