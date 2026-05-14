@@ -65,10 +65,11 @@
 
   /* ── Buttons ─────────────────────────────────── */
   .btn {
-    @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded text-sm font-medium
-           border border-so-border bg-so-card text-so-textMid
-           hover:bg-so-surface hover:text-so-text hover:border-so-muted
-           transition-all duration-150 whitespace-nowrap cursor-pointer;
+    @apply inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold
+           border border-so-border bg-so-surface text-so-text
+           hover:bg-so-card hover:border-so-muted
+           transition-all duration-150 whitespace-nowrap cursor-pointer
+           tracking-wide uppercase;
   }
   .btn-primary {
     @apply bg-so-red border-so-red text-white

@@ -103,7 +103,7 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
     <>
       <div className="card flex flex-col">
         {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 px-3 py-3 border-b border-so-border">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-4 border-b border-so-border bg-so-surface/50">
           <div className="relative flex-1 min-w-[180px]">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-so-muted" />
             <input type="text" placeholder="Buscar expediente..." value={query}
@@ -122,8 +122,8 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
             <option value="">Responsable</option>
             {responsables.map(r => <option key={r}>{r}</option>)}
           </select>
-          <button onClick={() => exportCSV(filtered)} className="btn text-xs ml-auto">
-            <Download size={12} /> CSV
+          <button onClick={() => exportCSV(filtered)} className="btn ml-auto">
+            <Download size={12} /> Exportar CSV
           </button>
         </div>
 
@@ -142,16 +142,16 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-so-border">
-              {pageRows.map(caso => (
-                <tr key={caso.id} onClick={() => setSelected(caso)} className="table-row-hover">
-                  <td className="px-3 py-3">
-                    <span className="text-[11px] font-mono text-so-muted">{caso.nro}</span>
+              {pageRows.map((caso, idx) => (
+                <tr key={caso.id} onClick={() => setSelected(caso)} className={`cursor-pointer transition-colors hover:bg-so-ash/10 ${idx % 2 === 0 ? 'bg-transparent' : 'bg-so-surface/40'}`}>
+                  <td className="px-3 py-4">
+                    <span className="text-xs font-mono font-medium text-so-textMid bg-so-surface px-1.5 py-0.5 border border-so-border">{caso.nro}</span>
                   </td>
-                  <td className="px-3 py-3 max-w-xs">
-                    <p className="text-sm text-so-text truncate">{caso.caratula}</p>
-                    <p className="text-[10px] text-so-muted mt-0.5">{caso.fuero} · {caso.jurisdiccion}</p>
+                  <td className="px-3 py-4 max-w-xs">
+                    <p className="text-sm font-medium text-so-text truncate leading-snug">{caso.caratula}</p>
+                    <p className="text-[10px] text-so-muted mt-1">{caso.fuero} · {caso.jurisdiccion}</p>
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-4">
                     <div className="flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
                             style={{ backgroundColor: clienteColors[caso.clienteId] ?? '#82181a' }}>
@@ -160,8 +160,8 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
                       <span className="text-xs text-so-textMid truncate max-w-[130px]">{caso.clienteNombre}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3"><BadgeEstadoCaso estado={caso.estado} /></td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-4"><BadgeEstadoCaso estado={caso.estado} /></td>
+                  <td className="px-3 py-4">
                     <div className="flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
                             style={{ backgroundColor: usuarioColor[caso.responsableId] ?? '#82181a' }}>
@@ -170,9 +170,11 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
                       <span className="text-xs text-so-textMid">{caso.responsableNombre.split(' ')[0]}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-xs"><VencimientoCell iso={caso.vencimiento} /></td>
-                  <td className="px-3 py-3 text-right text-xs text-so-textMid">
-                    {caso.monto ? fmtMoney(caso.monto) : '—'}
+                  <td className="px-3 py-4 text-xs"><VencimientoCell iso={caso.vencimiento} /></td>
+                  <td className="px-3 py-4 text-right">
+                    <span className={caso.monto ? 'text-xs font-semibold text-so-text tabular-nums' : 'text-xs text-so-muted'}>
+                      {caso.monto ? fmtMoney(caso.monto) : '—'}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -181,8 +183,8 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-t border-so-border text-xs text-so-muted">
-          <span>{filtered.length} expedientes · pág. {page} de {totalPages}</span>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-so-border text-xs text-so-muted bg-so-surface/30">
+          <span className="font-medium text-so-textMid">{filtered.length} expedientes &nbsp;·&nbsp; Página {page} de {totalPages}</span>
           <div className="flex items-center gap-1">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                     className="p-1 rounded hover:bg-so-surface disabled:opacity-30"><ChevronLeft size={13} /></button>
