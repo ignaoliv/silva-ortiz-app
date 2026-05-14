@@ -103,57 +103,39 @@ function esc(s, max = 499) {
 // ── Encontrar elementos clickeables del panel izquierdo ───────────
 async function encontrarItemsPanel(page) {
   return page.evaluate(() => {
-    const selectors = [
-      '.rich-table-row',
-      '[class*="actuacion"]',
-      '[id*="actuacion"]',
-      '.panel-left tr',
-      '.left-panel tr',
-      'table tr',
-      'ul li',
-      '.list-group-item',
-    ]
+    // Buscar dentro del panel izquierdo de selección de actuaciones
+    const panel = document.getElementById('libroDigitalForm:tblSelActuaciones') || document.body
 
-    let items = []
-    for (const sel of selectors) {
-      const found = [...document.querySelectorAll(sel)]
-      const conFecha = found.filter(el => /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || ''))
-      if (conFecha.length > 0) { items = conFecha; break }
-    }
+    // Buscar filas de tabla con fecha
+    const filas = [...panel.querySelectorAll('tr')].filter(tr =>
+      /\d{2}\/\d{2}\/\d{4}/.test(tr.textContent || '')
+    )
 
-    if (items.length === 0) {
-      items = [...document.querySelectorAll('div, td, li, span')].filter(el => {
-        const t = el.textContent || ''
-        return /\d{2}\/\d{2}\/\d{4}/.test(t) && t.length > 15 && t.length < 2000
-          && !el.querySelector('div, td, li')
-      })
-    }
-
-    return items.map((el, idx) => {
-      const texto = (el.innerText || el.textContent || '').trim()
+    return filas.map((tr, idx) => {
+      const texto = (tr.innerText || tr.textContent || '').trim()
       const fechaMatch = texto.match(/(\d{2}\/\d{2}\/\d{4})/)
       if (!fechaMatch) return null
       const fecha = fechaMatch[1]
+
       const fojasMatch = texto.match(/fs\.\s*([\d\s\/]+)/i) || texto.match(/foja[s]?\s+([\d\s\/]+)/i)
       const fojas = fojasMatch ? fojasMatch[1].trim() : ''
-      const badgeEl = el.querySelector('[class*="badge"],[class*="circle"],[class*="tipo"],[class*="label"]')
-      const tipo = badgeEl?.textContent?.trim().substring(0, 10) || ''
+
       const lineas = texto.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
       const desc = lineas
         .filter(l =>
           !l.match(/^\d{2}\/\d{2}\/\d{4}$/) &&
-          !l.match(/^fs\./i) &&
-          !l.match(/^foja/i) &&
-          !l.match(/^tipo\s*actuacion\s*:/i) &&
-          !l.match(/^detalle\s*:/i) &&
-          !l.match(/^actuaciones\s+actuales/i) &&
-          l.length > 2
+          !l.match(/^fs\./i) && !l.match(/^foja/i) &&
+          !l.match(/^tipo\s*actuacion\s*:/i) && !l.match(/^detalle\s*:/i) &&
+          !l.match(/^actuaciones\s+actuales/i) && l.length > 2
         )
         .join(' ').trim().substring(0, 900)
 
-      // Guardar el id del elemento para poder hacer click desde Playwright
-      const id = el.id || null  // sin #, se agrega al usarlo
-      return { fecha, tipo, descripcion: desc, fojas, domIdx: idx, domId: id }
+      // Preferir el <a> clickeable dentro de la fila (JSF genera a[id*="action-table"])
+      const anchor = tr.querySelector('a[id]') || tr.querySelector('a') || tr
+      const clickId = anchor.id || null
+      const tipo = texto.match(/\b([EDCOP])\b/)?.[1] || ''
+
+      return { fecha, tipo, descripcion: desc, fojas, domIdx: idx, domId: clickId }
     }).filter(Boolean)
   })
 }
@@ -164,57 +146,72 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
     let pdfBuffer = null
     let pdfUrl    = null
 
-    // 1. Click en la fila usando su ID JSF (getElementById no requiere escapar ":")
-    await page.evaluate(({ domId, domIdx }) => {
-      let el = domId ? document.getElementById(domId) : null
-      if (!el) {
-        // Fallback: <a> con la fecha en el texto dentro del panel izquierdo
+    // 1. Click en el <a> de la fila usando su ID JSF
+    //    Si no tenemos domId, usamos el índice de fila en el panel
+    console.log(`          🔍 domId="${item.domId}" domIdx=${item.domIdx}`)
+    if (item.domId) {
+      // Playwright click (maneja scroll y JSF onclick)
+      await page.locator(`[id="${item.domId}"]`).click({ timeout: 5000 }).catch(async () => {
+        // Fallback: JS click
+        await page.evaluate(id => { const el = document.getElementById(id); if (el) el.click() }, item.domId)
+      })
+    } else {
+      // Fallback: el primer <a> de la fila N dentro del panel de actuaciones
+      await page.evaluate((domIdx) => {
         const panel = document.getElementById('libroDigitalForm:tblSelActuaciones') || document.body
-        const anchors = [...panel.querySelectorAll('a')].filter(a =>
-          /\d{2}\/\d{2}\/\d{4}/.test(a.textContent || '') && (a.textContent || '').length < 500
-        )
-        el = anchors[domIdx]
-      }
-      if (el) el.click()
-    }, { domId: item.domId, domIdx: idx })
+        const filas = [...panel.querySelectorAll('tr')].filter(tr => /\d{2}\/\d{2}\/\d{4}/.test(tr.textContent || ''))
+        const fila  = filas[domIdx]
+        const a     = fila?.querySelector('a') || fila
+        if (a) a.click()
+      }, item.domIdx)
+    }
 
     // 2. Esperar que AJAX cargue el viewer
-    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
-    await page.waitForTimeout(1500)
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+    await page.waitForTimeout(2000)
 
-    // 3. Verificar que el viewer cargó (navbar con j_idt174 apareció)
-    const viewerCargado = await page.evaluate(() =>
-      !!document.querySelector('[id*="j_idt174"]')
-    )
-    if (!viewerCargado) {
-      console.log(`          ⚠️  Viewer no cargó`)
-      return null
-    }
-
-    // 4. El tercer botón de la navbar del viewer es "Descargar"
-    // Navbar: [Anterior] [Siguiente] [Descargar] ...
-    // ID pattern: libroDigitalForm:j_idt174:j_idt180 (tercer link del navbar)
-    const dlBtn = await page.evaluate(() => {
-      const navbar = document.querySelector('[id*="j_idt174"]')?.closest('ul, nav, div') ||
-                     document.querySelector('[id*="j_idt174"]')?.parentElement
-      if (!navbar) return null
-      const links = [...navbar.querySelectorAll('a[id*="j_idt174"]')]
-      // El de descarga es el que NO tiene título Anterior/Siguiente
-      const dl = links.find(a => {
-        const t = (a.title + a.textContent).toLowerCase()
+    // 3. Verificar que el viewer cargó buscando botones Anterior/Siguiente
+    //    (IDs JSF cambian entre sesiones, por eso no usamos j_idt174)
+    const viewerInfo = await page.evaluate(() => {
+      const links = [...document.querySelectorAll('a[id*="libroDigital"]')]
+      const withAnterior  = links.find(a => a.textContent.trim().toLowerCase().includes('anterior'))
+      const withSiguiente = links.find(a => a.textContent.trim().toLowerCase().includes('siguiente'))
+      // El botón de descarga: cualquier link en la misma navbar que no sea anterior/siguiente
+      const navbarEl = withAnterior?.closest('ul, nav, div.rf-tb, div[class*="toolbar"]') ||
+                       withAnterior?.parentElement?.parentElement
+      const dlBtn = navbarEl ? [...navbarEl.querySelectorAll('a[id]')].find(a => {
+        const t = (a.title + ' ' + a.textContent).toLowerCase()
         return !t.includes('anterior') && !t.includes('siguiente') && !t.includes('prev') && !t.includes('next')
-      })
-      return dl ? { id: dl.id, title: dl.title, text: dl.textContent.trim().substring(0, 30) } : null
+      }) : null
+      return {
+        cargado:     !!(withAnterior && withSiguiente),
+        anteriorId:  withAnterior?.id || null,
+        siguienteId: withSiguiente?.id || null,
+        dlBtnId:     dlBtn?.id    || null,
+        dlBtnTitle:  dlBtn?.title || null,
+        dlBtnText:   dlBtn?.textContent?.trim().substring(0, 30) || null,
+        navbarHtml:  navbarEl?.innerHTML?.substring(0, 500) || null,
+      }
     })
 
-    if (!dlBtn?.id) {
-      console.log(`          ⚠️  Botón descarga no encontrado en viewer`)
+    console.log(`          📋 Viewer cargado=${viewerInfo.cargado} anteriorId=${viewerInfo.anteriorId} dlBtnId=${viewerInfo.dlBtnId}`)
+    if (viewerInfo.navbarHtml) console.log(`          📋 NavbarHTML: ${viewerInfo.navbarHtml.substring(0, 300)}`)
+
+    if (!viewerInfo.cargado) {
+      // Puede estar mostrando "Seleccione un documento" - el click no funcionó
+      const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 200))
+      console.log(`          ⚠️  Viewer no cargó. Body: ${bodyText}`)
       return null
     }
-    console.log(`          🔘 Descarga: id="${dlBtn.id}" title="${dlBtn.title}" text="${dlBtn.text}"`)
 
-    // 5. Click en el botón de descarga e interceptar popup o download
-    const viewerBtn = page.locator(`[id="${dlBtn.id}"]`)
+    if (!viewerInfo.dlBtnId) {
+      console.log(`          ⚠️  Botón descarga no encontrado en viewer navbar`)
+      return null
+    }
+    console.log(`          🔘 Descarga: id="${viewerInfo.dlBtnId}" title="${viewerInfo.dlBtnTitle}" text="${viewerInfo.dlBtnText}"`)
+
+    // 4. Click en el botón de descarga e interceptar popup o download
+    const viewerBtn = page.locator(`[id="${viewerInfo.dlBtnId}"]`)
     const [popup, download] = await Promise.all([
       page.waitForEvent('popup',    { timeout: 12000 }).catch(() => null),
       page.waitForEvent('download', { timeout: 12000 }).catch(() => null),
