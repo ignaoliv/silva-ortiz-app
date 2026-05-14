@@ -5,7 +5,7 @@
 
 import { chromium } from 'playwright'
 import sql from 'mssql'
-import { readFileSync } from 'fs'
+import { readFileSync, promises as fsPromises } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import crypto from 'crypto'
@@ -195,37 +195,20 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
     }
 
     if (dlBtn) {
-      // Interceptar la respuesta PDF al clickear Descargar
-      const dlPromise = page.waitForResponse(
-        res => {
-          const ct  = res.headers()['content-type'] || ''
-          const url = res.url()
-          return ct.includes('pdf') || ct.includes('octet-stream') ||
-                 url.includes('.pdf') || url.includes('descargar') || url.includes('download')
-        },
-        { timeout: 15000 }
-      ).catch(() => null)
-
+      // El PJN sirve el PDF como descarga del browser → usar waitForEvent('download')
+      const downloadPromise = page.waitForEvent('download', { timeout: 20000 }).catch(() => null)
       await dlBtn.click()
-      const dlRes = await dlPromise
+      const download = await downloadPromise
 
-      if (dlRes?.ok()) {
-        pdfBuffer = await dlRes.body()
-        pdfUrl    = dlRes.url()
-        console.log(`          📡 PDF descargado (${pdfBuffer.length} bytes)`)
-      } else {
-        // Si no interceptamos respuesta, intentar con la URL del botón directamente
-        const href = await dlBtn.getAttribute('href').catch(() => null)
-        if (href && href !== '#') {
-          const fullUrl = href.startsWith('http') ? href : new URL(href, 'https://scw.pjn.gov.ar').href
-          pdfBuffer = await page.evaluate(async (url) => {
-            const r = await fetch(url, { credentials: 'include' })
-            if (!r.ok) return null
-            const buf = await r.arrayBuffer()
-            return Array.from(new Uint8Array(buf))
-          }, fullUrl)
-          if (pdfBuffer) { pdfBuffer = Buffer.from(pdfBuffer); pdfUrl = fullUrl }
+      if (download) {
+        const tmpPath = await download.path()
+        if (tmpPath) {
+          pdfBuffer = await fsPromises.readFile(tmpPath)
+          pdfUrl    = download.url()
+          console.log(`          📡 PDF descargado (${pdfBuffer.length} bytes)`)
         }
+      } else {
+        console.log(`          ⚠️  Download event no capturado`)
       }
     } else {
       console.log(`          ⚠️  Sin botón Descargar en el viewer`)
@@ -388,7 +371,7 @@ async function main() {
     try {
       const cuit     = cred.pjn_cuit
       const password = decrypt(cred.pjn_password_enc)
-      const context  = await browser.newContext()
+      const context  = await browser.newContext({ acceptDownloads: true })
       const page     = await context.newPage()
 
       // ── 1. Login ────────────────────────────────────────────
