@@ -358,7 +358,7 @@ export async function getPjnActuaciones(idExpediente: number): Promise<DBPjnActu
   return rows.map(r => ({
     id:           r.id as number,
     idExpediente: r.id_pjn_expediente as number,
-    fecha:        String(r.fecha).split('T')[0],
+    fecha:        r.fecha instanceof Date ? r.fecha.toISOString().split('T')[0] : String(r.fecha).split('T')[0],
     tipo:         r.tipo as string,
     detalle:      r.detalle as string,
     fojas:        r.fojas as string,
