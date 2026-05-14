@@ -180,7 +180,32 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
 
     // 2. Esperar que el AJAX de JSF/RichFaces cargue el viewer en el panel derecho
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
-    await page.waitForTimeout(1500)
+    await page.waitForTimeout(2000)
+
+    // Log del panel derecho para entender la estructura
+    const panelHtml = await page.evaluate(() => {
+      // Buscar el panel derecho / viewer
+      const candidates = [
+        document.querySelector('[id*="panelDer"]'),
+        document.querySelector('[id*="right"]'),
+        document.querySelector('[id*="viewer"]'),
+        document.querySelector('[id*="documento"]'),
+        document.querySelector('[id*="panel"][id*="body"]'),
+        document.querySelector('.rich-panel-body'),
+        // Buscar cualquier elemento que tenga texto sobre el documento
+        [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')]
+          .filter(el => /descargar|bajar|ver\s+doc|download/i.test(el.textContent + el.value + el.title))[0]
+          ?.closest('div, form, table'),
+      ].filter(Boolean)
+      const panel = candidates[0]
+      if (panel) return panel.innerHTML.substring(0, 1500)
+      // Si no encontramos el panel, loguear todos los links/botones
+      const todos = [...document.querySelectorAll('a, button, input[type="button"], input[type="submit"]')]
+        .map(el => `<${el.tagName} href="${el.getAttribute('href')}" id="${el.id}" value="${el.getAttribute('value')}">${el.textContent.trim().substring(0,30)}</${el.tagName}>`)
+        .join('\n')
+      return 'TODOS LOS BOTONES/LINKS:\n' + todos.substring(0, 1500)
+    })
+    console.log(`          🔍 Panel post-click:\n${panelHtml}`)
 
     // 3. Buscar el botón "Descargar" en el viewer e interceptar el PDF
     const dlSelectors = [
