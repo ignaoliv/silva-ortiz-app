@@ -286,8 +286,14 @@ async function main() {
 
       const letradoBtn = await page.$('input[value="LETRADO"], button:has-text("LETRADO")')
       if (letradoBtn) {
-        await letradoBtn.click()
-        await page.waitForLoadState('networkidle', { timeout: 15000 })
+        // Solo clickear si no está ya activo
+        const isActive = await page.evaluate(b => b.classList.contains('active'), letradoBtn)
+        if (!isActive) {
+          await letradoBtn.click()
+          await page.waitForLoadState('networkidle', { timeout: 15000 })
+        }
+        // Esperar explícitamente a que la tabla tenga al menos 1 fila
+        await page.waitForSelector('[id*="tablaConsultaForm"][id*="dataTable"] tbody tr', { timeout: 15000 }).catch(() => {})
         console.log('  ✅ Filtro LETRADO')
       }
 
@@ -381,7 +387,11 @@ async function main() {
           waitUntil: 'networkidle', timeout: 30000
         })
         const letBtn2 = await page.$('input[value="LETRADO"], button:has-text("LETRADO")')
-        if (letBtn2) { await letBtn2.click(); await page.waitForLoadState('networkidle', { timeout: 15000 }) }
+        if (letBtn2) {
+          const isActive2 = await page.evaluate(b => b.classList.contains('active'), letBtn2)
+          if (!isActive2) { await letBtn2.click(); await page.waitForLoadState('networkidle', { timeout: 15000 }) }
+          await page.waitForSelector('[id*="tablaConsultaForm"][id*="dataTable"] tbody tr', { timeout: 15000 }).catch(() => {})
+        }
 
         let navegoExp = false
 
