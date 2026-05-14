@@ -164,23 +164,56 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
     let pdfBuffer = null
     let pdfUrl    = null
 
-    // 1. Click en la fila del panel izquierdo (JSF IDs con ":" → getElementById)
-    await page.evaluate(({ domId, domIdx }) => {
-      let el = domId ? document.getElementById(domId) : null
+    // 1. Click en la fila del panel izquierdo
+    // Los links JSF del libro digital son <a> con handlers ajax
+    const clickInfo = await page.evaluate(({ domId, domIdx }) => {
+      // Estrategia A: buscar <a> con fecha en el texto (links JSF ajax)
+      const anchors = [...document.querySelectorAll('a')].filter(el =>
+        /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || '') &&
+        (el.textContent || '').length < 500
+      )
+      // Estrategia B: buscar <tr> o <li> clickeables con fecha
+      const rows = [...document.querySelectorAll('tr[onclick], tr[id], li[onclick], li[id]')].filter(el =>
+        /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || '')
+      )
+      // Estrategia C: getElementById
+      const byId = domId ? document.getElementById(domId) : null
+
+      // Elegir el mejor candidato
+      let el = anchors[domIdx] || rows[domIdx] || byId
       if (!el) {
-        const todos = [...document.querySelectorAll('div, td, li, tr, span')].filter(e =>
+        // Fallback: cualquier elemento hoja con fecha
+        const todos = [...document.querySelectorAll('td, span, div')].filter(e =>
           /\d{2}\/\d{2}\/\d{4}/.test(e.textContent || '') &&
-          (e.textContent || '').length < 2000 &&
-          !e.querySelector('div, td, li, tr')
+          (e.textContent || '').length < 500 &&
+          !e.querySelector('a, td, span, div')
         )
         el = todos[domIdx]
       }
-      if (el) el.click()
+
+      if (el) {
+        const info = `tag=${el.tagName} id="${el.id}" class="${el.className.substring(0,50)}" text="${(el.textContent||'').trim().substring(0,60)}"`
+        el.click()
+        return info
+      }
+      return 'no element found'
     }, { domId: item.domId, domIdx: idx })
+    console.log(`          🖱️  Clicked: ${clickInfo}`)
 
     // 2. Esperar que el AJAX de JSF/RichFaces cargue el viewer en el panel derecho
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
     await page.waitForTimeout(2000)
+
+    // Log del panel IZQUIERDO (lista de actuaciones) para entender la estructura clickeable
+    const leftHtml = await page.evaluate(() => {
+      const all = [...document.querySelectorAll('*')].find(el =>
+        /\d{2}\/\d{2}\/\d{4}/.test(el.textContent || '') &&
+        el.children.length > 0 && el.children.length < 20 &&
+        (el.textContent || '').length < 3000
+      )
+      return all ? all.outerHTML.substring(0, 1000) : 'no left panel found'
+    })
+    console.log(`          🗂️  Panel izquierdo HTML:\n${leftHtml}`)
 
     // Log del panel derecho para entender la estructura
     const panelHtml = await page.evaluate(() => {
