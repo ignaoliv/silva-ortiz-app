@@ -135,13 +135,24 @@ async function descargarPorHref(page, href, nroExp, fecha, idx) {
 // Tabla: id="expediente:action-table"
 // Botón descarga: <a href="/scw/viewer.seam?id=...&download=true" target="_blank">
 async function extraerActuacionesExpediente(page, nroExp) {
-  // Asegurarse de estar en la pestaña Actuaciones (tab id="expediente:actuaciones")
-  await page.evaluate(() => {
-    const tab = document.querySelector('[id="expediente:actuaciones"] a, #expediente\\:actuaciones a')
-    if (tab) tab.click()
-  }).catch(() => {})
-  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
-  await page.waitForTimeout(500)
+  // Click en el tab header "Actuaciones" — usar locator por texto (más robusto que ID)
+  // En RichFaces el header clickeable está FUERA del div expediente:actuaciones
+  const tabActuaciones = page.locator('.rf-tab-hdr:has-text("Actuaciones"), [class*="tab-hdr"]:has-text("Actuaciones"), [class*="tab"]:has-text("Actuaciones"), a:has-text("Actuaciones")').first()
+  await tabActuaciones.click({ timeout: 5000 }).catch(async () => {
+    // Fallback: buscar por texto visible en la zona de tabs
+    await page.evaluate(() => {
+      const all = [...document.querySelectorAll('div, span, a, li')]
+      const tab = all.find(el =>
+        el.textContent.trim() === 'Actuaciones' &&
+        el.children.length <= 1 &&
+        /tab|header|hdr|nav/i.test(el.className + (el.parentElement?.className || ''))
+      )
+      if (tab) tab.click()
+    })
+  })
+  // Esperar a que la tabla de actuaciones aparezca en el DOM
+  await page.waitForSelector('[id="expediente:action-table"]', { timeout: 12000 }).catch(() => {})
+  await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
 
   // Leer tabla de actuaciones
   const items = await page.evaluate(() => {
