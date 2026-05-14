@@ -176,13 +176,33 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
       const links = [...document.querySelectorAll('a[id*="libroDigital"]')]
       const withAnterior  = links.find(a => a.textContent.trim().toLowerCase().includes('anterior'))
       const withSiguiente = links.find(a => a.textContent.trim().toLowerCase().includes('siguiente'))
-      // El botón de descarga: cualquier link en la misma navbar que no sea anterior/siguiente
+
       const navbarEl = withAnterior?.closest('ul, nav, div.rf-tb, div[class*="toolbar"]') ||
                        withAnterior?.parentElement?.parentElement
-      const dlBtn = navbarEl ? [...navbarEl.querySelectorAll('a[id]')].find(a => {
-        const t = (a.title + ' ' + a.textContent).toLowerCase()
-        return !t.includes('anterior') && !t.includes('siguiente') && !t.includes('prev') && !t.includes('next')
+
+      // Listar TODOS los botones del navbar para debug
+      const allBtns = navbarEl ? [...navbarEl.querySelectorAll('a[id]')].map(a => ({
+        id:    a.id,
+        title: a.title,
+        text:  a.textContent.trim().substring(0, 40),
+        href:  a.getAttribute('href') || '',
+      })) : []
+
+      // Buscar botón de descarga: primero por texto/título "descargar"
+      let dlBtn = navbarEl ? [...navbarEl.querySelectorAll('a[id]')].find(a => {
+        const t = (a.title + ' ' + a.textContent + ' ' + (a.getAttribute('onclick') || '')).toLowerCase()
+        return t.includes('descargar') || t.includes('download')
       }) : null
+
+      // Si no hay texto explícito, buscar el último link del navbar (suele ser Descargar)
+      if (!dlBtn && navbarEl) {
+        const candidates = [...navbarEl.querySelectorAll('a[id]')].filter(a => {
+          const t = (a.title + ' ' + a.textContent).toLowerCase()
+          return !t.includes('anterior') && !t.includes('siguiente') && !t.includes('prev') && !t.includes('next') && !t.includes('marcar')
+        })
+        dlBtn = candidates[candidates.length - 1] || null  // el último candidato
+      }
+
       return {
         cargado:     !!(withAnterior && withSiguiente),
         anteriorId:  withAnterior?.id || null,
@@ -190,12 +210,14 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
         dlBtnId:     dlBtn?.id    || null,
         dlBtnTitle:  dlBtn?.title || null,
         dlBtnText:   dlBtn?.textContent?.trim().substring(0, 30) || null,
-        navbarHtml:  navbarEl?.innerHTML?.substring(0, 500) || null,
+        allBtns,
+        navbarHtml:  navbarEl?.innerHTML?.substring(0, 800) || null,
       }
     })
 
-    console.log(`          📋 Viewer cargado=${viewerInfo.cargado} anteriorId=${viewerInfo.anteriorId} dlBtnId=${viewerInfo.dlBtnId}`)
-    if (viewerInfo.navbarHtml) console.log(`          📋 NavbarHTML: ${viewerInfo.navbarHtml.substring(0, 300)}`)
+    console.log(`          📋 Viewer cargado=${viewerInfo.cargado} anteriorId=${viewerInfo.anteriorId}`)
+    console.log(`          📋 Todos los btns: ${JSON.stringify(viewerInfo.allBtns)}`)
+    if (viewerInfo.navbarHtml) console.log(`          📋 NavbarHTML: ${viewerInfo.navbarHtml.substring(0, 600)}`)
 
     if (!viewerInfo.cargado) {
       // Puede estar mostrando "Seleccione un documento" - el click no funcionó
@@ -210,22 +232,68 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
     }
     console.log(`          🔘 Descarga: id="${viewerInfo.dlBtnId}" title="${viewerInfo.dlBtnTitle}" text="${viewerInfo.dlBtnText}"`)
 
-    // 4. Click en el botón de descarga e interceptar popup o download
+    // 4. Click en el botón de descarga e interceptar popup, download o diálogo PF
     const viewerBtn = page.locator(`[id="${viewerInfo.dlBtnId}"]`)
     const [popup, download] = await Promise.all([
       page.waitForEvent('popup',    { timeout: 12000 }).catch(() => null),
       page.waitForEvent('download', { timeout: 12000 }).catch(() => null),
       viewerBtn.click(),
     ])
+    await page.waitForTimeout(1500)
 
-    if (download) {
+    // 4b. Si abrió un diálogo PrimeFaces de confirmación, hacer click en el botón de confirmar
+    const dialogBtn = await page.evaluate(() => {
+      // Buscar cualquier diálogo visible de PF con un botón de confirmar/aceptar/descargar
+      const dialogs = [...document.querySelectorAll('.ui-dialog:not([style*="display: none"]), .ui-dialog-visible')]
+      for (const dlg of dialogs) {
+        const btns = [...dlg.querySelectorAll('button, a.ui-button')]
+        const confirmBtn = btns.find(b => {
+          const t = (b.textContent + ' ' + b.value + ' ' + b.title).toLowerCase()
+          return t.includes('aceptar') || t.includes('confirm') || t.includes('descargar') || t.includes('si') || t.includes('ok')
+        })
+        if (confirmBtn) return { id: confirmBtn.id, text: confirmBtn.textContent.trim().substring(0, 30) }
+      }
+      return null
+    })
+
+    if (dialogBtn) {
+      console.log(`          💬 Diálogo detectado, confirmando: "${dialogBtn.text}"`)
+      const [popup2, download2] = await Promise.all([
+        page.waitForEvent('popup',    { timeout: 12000 }).catch(() => null),
+        page.waitForEvent('download', { timeout: 12000 }).catch(() => null),
+        dialogBtn.id
+          ? page.locator(`[id="${dialogBtn.id}"]`).click()
+          : page.evaluate(t => {
+              const btns = [...document.querySelectorAll('button, a.ui-button')]
+              const b = btns.find(x => x.textContent.trim().startsWith(t))
+              if (b) b.click()
+            }, dialogBtn.text),
+      ])
+      await page.waitForTimeout(1500)
+      if (!popup && download2) {
+        const tmpPath = await download2.path()
+        if (tmpPath) { pdfBuffer = await fsPromises.readFile(tmpPath); pdfUrl = download2.url() }
+      }
+      if (!popup && !pdfBuffer && popup2) {
+        console.log(`          🗔 PDF en nueva pestaña (tras diálogo): ${popup2.url()}`)
+        await popup2.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+        const arr = await popup2.evaluate(async () => {
+          const r = await fetch(window.location.href, { credentials: 'include' })
+          return r.ok ? Array.from(new Uint8Array(await r.arrayBuffer())) : null
+        }).catch(() => null)
+        if (arr) pdfBuffer = Buffer.from(arr)
+        await popup2.close().catch(() => {})
+      }
+    }
+
+    if (download && !pdfBuffer) {
       const tmpPath = await download.path()
       if (tmpPath) {
         pdfBuffer = await fsPromises.readFile(tmpPath)
         pdfUrl    = download.url()
         console.log(`          📡 PDF via download (${pdfBuffer.length} bytes)`)
       }
-    } else if (popup) {
+    } else if (popup && !pdfBuffer) {
       console.log(`          🗔 PDF en nueva pestaña: ${popup.url()}`)
       await popup.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
       const pdfRes = await popup.waitForResponse(
@@ -248,7 +316,7 @@ async function descargarDocumentoActuacion(page, item, nroExp, fecha, idx) {
         }
       }
       await popup.close().catch(() => {})
-    } else {
+    } else if (!pdfBuffer && !dialogBtn) {
       console.log(`          ⚠️  Sin popup ni download event`)
     }
 
