@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { User, Mail } from 'lucide-react'
 import { initials } from '@/lib/utils'
 import PJNCredencialesForm from '@/components/perfil/PJNCredencialesForm'
+import CalendarSyncWidget from '@/components/perfil/CalendarSyncWidget'
 
 export const metadata = { title: 'Mi Perfil · Silva Ortiz' }
 
@@ -42,6 +43,9 @@ export default async function PerfilPage() {
 
       {/* Credenciales PJN */}
       <PJNCredencialesForm />
+
+      {/* Microsoft Calendar */}
+      <CalendarSyncWidget />
 
       <p className="text-[10px] text-so-muted text-center">
         Las credenciales del PJN se usan exclusivamente para sincronizar tus expedientes automáticamente cada noche.
