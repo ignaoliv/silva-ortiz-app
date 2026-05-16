@@ -11,7 +11,8 @@ import { BlobServiceClient, BlobSASPermissions } from '@azure/storage-blob'
 import { createRequire } from 'module'
 
 const require = createRequire(import.meta.url)
-const pdfParse = require('pdf-parse')
+const { PDFParse } = require('pdf-parse')
+const pdfParse = (buffer) => new PDFParse().parse(buffer)
 
 const OCR_TEXT_MIN = 80
 

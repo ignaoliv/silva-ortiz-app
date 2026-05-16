@@ -5,21 +5,21 @@
 
 import { chromium } from 'playwright'
 import sql from 'mssql'
-import { readFileSync, promises as fsPromises } from 'fs'
+import { readFileSync, writeFileSync, readdirSync, rmSync, mkdtempSync, promises as fsPromises } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { tmpdir } from 'os'
+import { execSync } from 'child_process'
 import crypto from 'crypto'
 import { BlobServiceClient, BlobSASPermissions } from '@azure/storage-blob'
 import { createRequire as makeRequire } from 'module'
 
 const require = makeRequire(import.meta.url)
-const pdfParse    = require('pdf-parse')
-const { createCanvas } = require('canvas')
+const { PDFParse } = require('pdf-parse')
+const pdfParse = (buffer) => new PDFParse().parse(buffer)
 const { createWorker } = require('tesseract.js')
 
-// pdfjs-dist necesita import dinámico (ES module)
-const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs').catch(() => null)
-
+const PDFTOPPM    = '/opt/homebrew/bin/pdftoppm'
 const OCR_TEXT_MIN = 80  // si pdf-parse da menos de esto, asumimos que es escaneo
 
 const __dir = dirname(fileURLToPath(import.meta.url))
@@ -111,37 +111,30 @@ function esc(s, max = 499) {
   return (String(s || '')).replace(/'/g, "''").substring(0, max)
 }
 
-// ── OCR con Tesseract sobre un PDF escaneado ──────────────────────
+// ── OCR: pdftoppm → imagen → tesseract ───────────────────────────
 async function ocr(buffer) {
-  if (!pdfjsLib) {
-    console.warn('          ⚠️  pdfjs-dist no disponible — saltando OCR')
-    return null
-  }
+  const tmpDir  = mkdtempSync(join(tmpdir(), 'pjn-ocr-'))
+  const pdfPath = join(tmpDir, 'doc.pdf')
+  writeFileSync(pdfPath, buffer)
   try {
-    // Cargar el PDF
-    const pdfData = new Uint8Array(buffer)
-    const pdf     = await pdfjsLib.getDocument({ data: pdfData, useWorkerFetch: false, isEvalSupported: false }).promise
-    const texts   = []
-    const worker  = await createWorker('spa')  // español
-
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page     = await pdf.getPage(p)
-      const viewport = page.getViewport({ scale: 2.0 })  // escala 2x para mejor precisión
-      const canvas   = createCanvas(viewport.width, viewport.height)
-      const ctx      = canvas.getContext('2d')
-      await page.render({ canvasContext: ctx, viewport }).promise
-
-      const { data: { text } } = await worker.recognize(canvas.toBuffer('image/png'))
+    execSync(`${PDFTOPPM} -png -r 200 "${pdfPath}" "${join(tmpDir, 'page')}"`, { stdio: 'pipe' })
+    const pages  = readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort()
+    if (pages.length === 0) return null
+    const worker = await createWorker('spa')
+    const texts  = []
+    for (const page of pages) {
+      const { data: { text } } = await worker.recognize(join(tmpDir, page))
       if (text.trim()) texts.push(text.trim())
     }
-
     await worker.terminate()
     const resultado = texts.join('\n\n')
-    console.log(`          🔍 OCR completado: ${resultado.length} caracteres (${pdf.numPages} páginas)`)
+    console.log(`          🔍 OCR: ${resultado.length} chars (${pages.length} págs)`)
     return resultado || null
   } catch (e) {
     console.warn(`          ⚠️  OCR falló: ${e.message.substring(0, 80)}`)
     return null
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true })
   }
 }
 
