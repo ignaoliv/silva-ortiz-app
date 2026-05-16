@@ -632,6 +632,126 @@ export async function countFeedbackNoLeido(): Promise<number> {
   return Number(rows?.[0]?.n ?? 0)
 }
 
+// ── Plantillas ────────────────────────────────────────────────────────────────
+
+export interface DBPlantilla {
+  id: number
+  nombre: string
+  categoria: string | null
+  contenido: string
+  creadoPor: string | null
+  creadoEn: Date
+  actualizadoEn: Date
+}
+
+export async function getPlantillas(): Promise<DBPlantilla[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id, nombre, categoria, contenido, creado_por, creado_en, actualizado_en
+    FROM plantillas
+    ORDER BY actualizado_en DESC
+  `)
+  if (!rows) return []
+  return rows.map(r => ({
+    id:            r.id as number,
+    nombre:        r.nombre as string,
+    categoria:     r.categoria as string | null,
+    contenido:     r.contenido as string,
+    creadoPor:     r.creado_por as string | null,
+    creadoEn:      r.creado_en as Date,
+    actualizadoEn: r.actualizado_en as Date,
+  }))
+}
+
+export async function getPlantilla(id: number): Promise<DBPlantilla | null> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id, nombre, categoria, contenido, creado_por, creado_en, actualizado_en
+    FROM plantillas
+    WHERE id = ${id}
+  `)
+  const r = rows?.[0]
+  if (!r) return null
+  return {
+    id:            r.id as number,
+    nombre:        r.nombre as string,
+    categoria:     r.categoria as string | null,
+    contenido:     r.contenido as string,
+    creadoPor:     r.creado_por as string | null,
+    creadoEn:      r.creado_en as Date,
+    actualizadoEn: r.actualizado_en as Date,
+  }
+}
+
+export async function createPlantilla(data: {
+  nombre: string
+  categoria?: string
+  contenido: string
+  creadoPor: string
+}): Promise<number> {
+  const nombre    = esc(data.nombre)
+  const categoria = data.categoria ? `N'${esc(data.categoria)}'` : 'NULL'
+  const contenido = esc(data.contenido)
+  const creadoPor = esc(data.creadoPor)
+  const rows = await query<Record<string, unknown>>(`
+    INSERT INTO plantillas (nombre, categoria, contenido, creado_por)
+    OUTPUT INSERTED.id
+    VALUES (N'${nombre}', ${categoria}, N'${contenido}', N'${creadoPor}')
+  `)
+  return rows?.[0]?.id as number
+}
+
+export async function updatePlantilla(
+  id: number,
+  data: { nombre: string; categoria?: string; contenido: string }
+): Promise<void> {
+  const nombre    = esc(data.nombre)
+  const categoria = data.categoria ? `N'${esc(data.categoria)}'` : 'NULL'
+  const contenido = esc(data.contenido)
+  await execute(`
+    UPDATE plantillas
+    SET nombre = N'${nombre}', categoria = ${categoria}, contenido = N'${contenido}', actualizado_en = GETDATE()
+    WHERE id = ${id}
+  `)
+}
+
+export async function deletePlantilla(id: number): Promise<void> {
+  await execute(`DELETE FROM plantillas WHERE id = ${id}`)
+}
+
+export async function getCasoParaDocumento(id: number): Promise<{
+  caratula: string
+  nroExpediente: string | null
+  juzgado: string | null
+  fuero: string | null
+  cliente: string | null
+  abogadoResponsable: string | null
+} | null> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT
+      c.caratula,
+      c.nro_expediente,
+      ISNULL(j.nombre, NULL)             AS juzgado,
+      ISNULL(f.nombre, NULL)             AS fuero,
+      ISNULL(cl.razon_social, NULL)      AS cliente,
+      ISNULL(u.nombre_completo, NULL)    AS abogado_responsable
+    FROM casos c
+    LEFT JOIN juzgados j          ON c.id_juzgado             = j.id_juzgado
+    LEFT JOIN fueros f            ON c.id_fuero               = f.id_fuero
+    LEFT JOIN clientes cl         ON c.id_cliente             = cl.id_cliente
+    LEFT JOIN usuarios_estudio u  ON c.id_abogado_responsable = u.id_usuario
+    WHERE c.id_caso = ${id} AND c.activo = 1
+  `)
+  const r = rows?.[0]
+  if (!r) return null
+  return {
+    caratula:           r.caratula as string,
+    nroExpediente:      r.nro_expediente as string | null,
+    juzgado:            r.juzgado as string | null,
+    fuero:              r.fuero as string | null,
+    cliente:            r.cliente as string | null,
+    abogadoResponsable: r.abogado_responsable as string | null,
+  }
+}
+
 export interface PjnUserStatus {
   conectado:      boolean
   sincronizando:  boolean          // hay un row con fecha_fin NULL (scraper corriendo)

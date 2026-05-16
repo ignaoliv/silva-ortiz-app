@@ -1,12 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake } from 'lucide-react'
+import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown } from 'lucide-react'
 import type { DBCaso, DBMovimiento, DBAudiencia, DBHonorario } from '@/lib/queries'
 import { fmtDateLarga, fmtMoney, cn } from '@/lib/utils'
 import { BadgeEstadoCaso } from '@/components/ui/Badge'
 import TabNotas from '@/components/expedientes/TabNotas'
 import TabInstrucciones from '@/components/expedientes/TabInstrucciones'
 import TabNegociacion from '@/components/expedientes/TabNegociacion'
+import GenerarDocumentoModal from '@/components/plantillas/GenerarDocumentoModal'
 
 const TABS = [
   { id: 'detalle',       label: 'Detalles',        icon: FileText   },
@@ -21,11 +22,12 @@ const TABS = [
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClose: () => void }) {
-  const [tab,       setTab]       = useState('detalle')
-  const [movs,      setMovs]      = useState<DBMovimiento[]>([])
-  const [auds,      setAuds]      = useState<DBAudiencia[]>([])
-  const [hons,      setHons]      = useState<DBHonorario[]>([])
-  const [loading,   setLoading]   = useState(false)
+  const [tab,          setTab]          = useState('detalle')
+  const [movs,         setMovs]         = useState<DBMovimiento[]>([])
+  const [auds,         setAuds]         = useState<DBAudiencia[]>([])
+  const [hons,         setHons]         = useState<DBHonorario[]>([])
+  const [loading,      setLoading]      = useState(false)
+  const [genDocOpen,   setGenDocOpen]   = useState(false)
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -50,6 +52,7 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
   const MOV_COLORS = ['bg-so-red','bg-blue-500','bg-emerald-500','bg-amber-500','bg-purple-500']
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
       <div className="bg-so-card border border-so-border rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -62,9 +65,19 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
             <h2 className="text-sm font-medium text-so-text leading-snug">{caso.caratula}</h2>
             <p className="text-xs text-so-subtle mt-1">{caso.juzgado}</p>
           </div>
-          <button onClick={onClose} className="ml-4 text-so-muted hover:text-so-text transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2 ml-4">
+            <button
+              onClick={() => setGenDocOpen(true)}
+              title="Generar documento"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-so-muted border border-so-border hover:bg-so-surface hover:text-so-text rounded transition-colors"
+            >
+              <FileDown size={13} />
+              Generar doc
+            </button>
+            <button onClick={onClose} className="text-so-muted hover:text-so-text transition-colors">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Tabs — scrollable para que quepan todas */}
@@ -193,5 +206,14 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
         </div>
       </div>
     </div>
+
+    {genDocOpen && (
+      <GenerarDocumentoModal
+        casoId={caso.id}
+        caratula={caso.caratula}
+        onClose={() => setGenDocOpen(false)}
+      />
+    )}
+    </>
   )
 }
