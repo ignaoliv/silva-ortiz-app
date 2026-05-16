@@ -13,7 +13,14 @@ import { BlobServiceClient, BlobSASPermissions } from '@azure/storage-blob'
 import { createRequire as makeRequire } from 'module'
 
 const require = makeRequire(import.meta.url)
-const pdfParse = require('pdf-parse')
+const pdfParse    = require('pdf-parse')
+const { createCanvas } = require('canvas')
+const { createWorker } = require('tesseract.js')
+
+// pdfjs-dist necesita import dinámico (ES module)
+const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs').catch(() => null)
+
+const OCR_TEXT_MIN = 80  // si pdf-parse da menos de esto, asumimos que es escaneo
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 
@@ -104,17 +111,58 @@ function esc(s, max = 499) {
   return (String(s || '')).replace(/'/g, "''").substring(0, max)
 }
 
-// ── Extraer texto de un buffer PDF ───────────────────────────────
+// ── OCR con Tesseract sobre un PDF escaneado ──────────────────────
+async function ocr(buffer) {
+  if (!pdfjsLib) {
+    console.warn('          ⚠️  pdfjs-dist no disponible — saltando OCR')
+    return null
+  }
+  try {
+    // Cargar el PDF
+    const pdfData = new Uint8Array(buffer)
+    const pdf     = await pdfjsLib.getDocument({ data: pdfData, useWorkerFetch: false, isEvalSupported: false }).promise
+    const texts   = []
+    const worker  = await createWorker('spa')  // español
+
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page     = await pdf.getPage(p)
+      const viewport = page.getViewport({ scale: 2.0 })  // escala 2x para mejor precisión
+      const canvas   = createCanvas(viewport.width, viewport.height)
+      const ctx      = canvas.getContext('2d')
+      await page.render({ canvasContext: ctx, viewport }).promise
+
+      const { data: { text } } = await worker.recognize(canvas.toBuffer('image/png'))
+      if (text.trim()) texts.push(text.trim())
+    }
+
+    await worker.terminate()
+    const resultado = texts.join('\n\n')
+    console.log(`          🔍 OCR completado: ${resultado.length} caracteres (${pdf.numPages} páginas)`)
+    return resultado || null
+  } catch (e) {
+    console.warn(`          ⚠️  OCR falló: ${e.message.substring(0, 80)}`)
+    return null
+  }
+}
+
+// ── Extraer texto de un buffer PDF (digital → OCR como fallback) ──
 async function extraerTextoPDF(buffer) {
   try {
-    const data = await pdfParse(buffer)
+    // 1. Intentar extracción directa (PDFs digitales)
+    const data  = await pdfParse(buffer)
     const texto = data.text?.trim() ?? ''
-    if (texto.length < 10) return null
-    console.log(`          📝 Texto extraído: ${texto.length} caracteres`)
-    return texto
+    if (texto.length >= OCR_TEXT_MIN) {
+      console.log(`          📝 Texto extraído (digital): ${texto.length} caracteres`)
+      return texto
+    }
+
+    // 2. Poco o ningún texto → es un escaneo → OCR
+    console.log(`          🔍 PDF escaneado detectado (${texto.length} chars) — iniciando OCR...`)
+    return await ocr(buffer)
   } catch (e) {
-    console.warn(`          ⚠️  No se pudo extraer texto del PDF: ${e.message.substring(0, 80)}`)
-    return null
+    // pdf-parse falló → intentar OCR directamente
+    console.warn(`          ⚠️  pdf-parse falló: ${e.message.substring(0, 60)} — intentando OCR...`)
+    return await ocr(buffer)
   }
 }
 

@@ -13,6 +13,8 @@ import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 const pdfParse = require('pdf-parse')
 
+const OCR_TEXT_MIN = 80
+
 await Actor.init()
 
 const input = await Actor.getInput() ?? {}
@@ -93,13 +95,18 @@ function esc(s, max = 499) {
 }
 
 // ── Extraer texto de un buffer PDF ────────────────────────────────
+// En Apify solo usamos pdf-parse (sin OCR — los escaneados quedan pendientes)
 async function extraerTextoPDF(buffer) {
   try {
-    const data = await pdfParse(buffer)
+    const data  = await pdfParse(buffer)
     const texto = data.text?.trim() ?? ''
-    if (texto.length < 10) return null
-    console.log(`          📝 Texto extraído: ${texto.length} caracteres`)
-    return texto
+    if (texto.length >= OCR_TEXT_MIN) {
+      console.log(`          📝 Texto extraído (digital): ${texto.length} caracteres`)
+      return texto
+    }
+    // PDF escaneado — OCR no disponible en Apify sin dependencias de sistema
+    console.log(`          🔍 PDF escaneado detectado (${texto.length} chars) — OCR no disponible en Apify`)
+    return null
   } catch (e) {
     console.warn(`          ⚠️  No se pudo extraer texto del PDF: ${e.message.substring(0, 80)}`)
     return null
