@@ -12,7 +12,7 @@ async function refreshMsToken(refreshToken: string) {
         client_secret: process.env.AZURE_AD_CLIENT_SECRET!,
         grant_type:    'refresh_token',
         refresh_token: refreshToken,
-        scope:         'openid profile email offline_access Calendars.ReadWrite',
+        scope:         'openid profile email offline_access',
       }),
     }
   )
@@ -31,7 +31,7 @@ export const authOptions: NextAuthOptions = {
       tenantId:     'common', // multi-tenant: acepta cualquier org de Microsoft
       authorization: {
         params: {
-          scope: 'openid profile email offline_access Calendars.ReadWrite',
+          scope: 'openid profile email offline_access',
         },
       },
     }),
