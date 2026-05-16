@@ -28,8 +28,17 @@ export default function PjnResumen({ idExpediente, nro, caratula }: Props) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error ?? `Error ${res.status}`)
       }
-      if (!res.body) throw new Error('Sin respuesta del servidor')
 
+      // Resumen cacheado desde DB (respuesta JSON)
+      const contentType = res.headers.get('content-type') ?? ''
+      if (contentType.includes('application/json')) {
+        const data = await res.json()
+        setResumen(data.resumen ?? '')
+        return
+      }
+
+      // Generación en tiempo real (streaming)
+      if (!res.body) throw new Error('Sin respuesta del servidor')
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let texto = ''

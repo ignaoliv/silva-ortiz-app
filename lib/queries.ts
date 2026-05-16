@@ -489,6 +489,7 @@ export interface DBPjnExpediente {
   ultimaAct:   string | null
   idCaso:      number | null
   fechaSync:   string
+  resumenIa:   string | null
 }
 
 export interface DBPjnActuacion {
@@ -500,12 +501,13 @@ export interface DBPjnActuacion {
   fojas:         string
   urlBlob:       string | null
   textoExtraido: string | null
+  resumenIa:     string | null
 }
 
 export async function getPjnExpedientes(email: string): Promise<DBPjnExpediente[]> {
   const rows = await query<Record<string, unknown>>(`
     SELECT id, nro_expediente, caratula, dependencia, situacion,
-           ultima_act, id_caso, fecha_sync
+           ultima_act, id_caso, fecha_sync, resumen_ia
     FROM pjn_expedientes
     WHERE email_usuario = '${email.replace(/'/g, "''")}'
     ORDER BY fecha_sync DESC
@@ -520,12 +522,13 @@ export async function getPjnExpedientes(email: string): Promise<DBPjnExpediente[
     ultimaAct:   r.ultima_act ? String(r.ultima_act).split('T')[0] : null,
     idCaso:      r.id_caso as number | null,
     fechaSync:   String(r.fecha_sync).split('T')[0],
+    resumenIa:   r.resumen_ia as string | null,
   }))
 }
 
 export async function getPjnActuaciones(idExpediente: number): Promise<DBPjnActuacion[]> {
   const rows = await query<Record<string, unknown>>(`
-    SELECT id, id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob, texto_extraido
+    SELECT id, id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob, texto_extraido, resumen_ia
     FROM pjn_actuaciones
     WHERE id_pjn_expediente = ${idExpediente}
     ORDER BY fecha DESC
@@ -540,6 +543,7 @@ export async function getPjnActuaciones(idExpediente: number): Promise<DBPjnActu
     fojas:        r.fojas as string,
     urlBlob:       r.url_blob       as string | null,
     textoExtraido: r.texto_extraido as string | null,
+    resumenIa:     r.resumen_ia     as string | null,
   }))
 }
 

@@ -8,13 +8,14 @@ interface Props {
   blobUrl:        string
   titulo:         string
   textoExtraido?: string | null
+  resumenIa?:     string | null   // resumen pre-generado — si existe, se muestra directo
   onClose:        () => void
   onVerPdf:       () => void
 }
 
-export default function DocResumenModal({ blobUrl, titulo, textoExtraido, onClose, onVerPdf }: Props) {
-  const [resumen,  setResumen]  = useState('')
-  const [loading,  setLoading]  = useState(true)
+export default function DocResumenModal({ blobUrl, titulo, textoExtraido, resumenIa, onClose, onVerPdf }: Props) {
+  const [resumen,  setResumen]  = useState(resumenIa ?? '')
+  const [loading,  setLoading]  = useState(!resumenIa)
   const [error,    setError]    = useState<string | null>(null)
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export default function DocResumenModal({ blobUrl, titulo, textoExtraido, onClos
   }, [onClose])
 
   useEffect(() => {
+    if (resumenIa) return  // ya tenemos resumen cacheado
     async function fetchResumen() {
       try {
         const res = await fetch('/api/pjn/resumir-doc', {

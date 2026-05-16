@@ -20,16 +20,26 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurado' }, { status: 503 })
   }
 
+  // Verificar si hay resumen pre-generado en la DB
+  const expedientes = await getPjnExpedientes(session.user?.email ?? '')
+  const expediente  = expedientes.find(e => e.id === idExpediente)
+  if (expediente?.resumenIa) {
+    return NextResponse.json({ resumen: expediente.resumenIa, cached: true })
+  }
+
   const actuaciones = await getPjnActuaciones(idExpediente)
   if (actuaciones.length === 0) {
     return NextResponse.json({ resumen: 'Sin actuaciones registradas para resumir.' })
   }
 
-  // Construir texto de actuaciones para el prompt
+  // Construir texto de actuaciones para el prompt (incluye texto extraído si disponible)
   const actsTexto = actuaciones
     .slice()
-    .reverse() // cronológico ascendente
-    .map(a => `• ${a.fecha}  [${a.tipo}]  ${a.detalle}`)
+    .reverse()
+    .map(a => {
+      const base = `• ${a.fecha}  [${a.tipo}]  ${a.detalle}`
+      return a.textoExtraido ? `${base}\n  Contenido: ${a.textoExtraido.substring(0, 500)}` : base
+    })
     .join('\n')
 
   const prompt = `Sos un asistente jurídico argentino. Te doy las actuaciones de un expediente judicial y necesito que hagas un resumen ejecutivo breve (máximo 120 palabras) en español, dirigido al abogado del caso.
