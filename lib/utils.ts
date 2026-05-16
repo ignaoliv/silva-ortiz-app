@@ -45,6 +45,21 @@ export function diffDays(iso: string): number {
   return Math.round((target.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
 }
 
+/** "16/05 07:14" en horario de Buenos Aires — acepta Date o string ISO */
+export function fmtDateTime(value: Date | string | null): string {
+  if (!value) return '—'
+  const d = value instanceof Date ? value : new Date(value)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day:    '2-digit',
+    month:  '2-digit',
+    hour:   '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).replace(',', '')
+}
+
 /** "$1.234.567" */
 export function fmtMoney(n: number): string {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 0 })

@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import PjnSetupModal from '@/components/pjn/PjnSetupModal'
+import FeedbackButton from '@/components/ui/FeedbackButton'
 import { hasPjnCredentials } from '@/lib/queries'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <main className="max-w-[1400px] mx-auto px-6 py-6">
         {children}
       </main>
+      <FeedbackButton />
     </div>
   )
 }

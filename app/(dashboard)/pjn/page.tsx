@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getPjnExpedientes, getPjnSyncLog } from '@/lib/queries'
 import PjnExpedientesList from '@/components/pjn/PjnExpedientesList'
+import { fmtDateTime } from '@/lib/utils'
 import { RefreshCw, CheckCircle2, XCircle, Clock } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +41,7 @@ export default async function PjnPage() {
                     : <Clock size={12} className="text-yellow-400" />
                 }
                 <span className="text-xs font-medium text-so-text">
-                  {lastSync.fechaInicio}
+                  {fmtDateTime(lastSync.fechaInicio)}
                 </span>
                 <span className="text-[10px] text-so-muted">
                   · {lastSync.expedientes} exp · {lastSync.actuacionesNew} nuevas

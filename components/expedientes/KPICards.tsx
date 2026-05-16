@@ -1,4 +1,4 @@
-import { Briefcase, CheckCircle, AlertTriangle, Calendar } from 'lucide-react'
+import { AlertTriangle, Calendar, Zap, CheckCircle, ChevronRight } from 'lucide-react'
 
 interface KPIs {
   total: number
@@ -7,29 +7,84 @@ interface KPIs {
   audSemana: number
 }
 
-export default function KPICards({ kpis }: { kpis: KPIs }) {
-  const cards = [
-    { label: 'Total expedientes',       value: kpis.total.toLocaleString('es-AR'),   icon: Briefcase,     accent: 'text-so-textMid',   dot: 'bg-so-muted'    },
-    { label: 'Activos',                  value: kpis.activos.toLocaleString('es-AR'),  icon: CheckCircle,   accent: 'text-emerald-400',  dot: 'bg-emerald-500' },
-    { label: 'Vencen en 7 días',         value: kpis.en7dias.toString(),               icon: AlertTriangle, accent: 'text-amber-400',    dot: 'bg-amber-500'   },
-    { label: 'Audiencias esta semana',   value: kpis.audSemana.toString(),             icon: Calendar,      accent: 'text-blue-400',     dot: 'bg-blue-500'    },
-  ]
+interface Props {
+  kpis: KPIs
+  hasPjn: boolean
+}
 
+export default function KPICards({ kpis, hasPjn }: Props) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-      {cards.map(c => {
-        const Icon = c.icon
-        return (
-          <div key={c.label} className="card px-5 py-4">
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs text-so-subtle tracking-wide uppercase">{c.label}</p>
-              <Icon size={14} className={c.accent} />
-            </div>
-            <p className="text-3xl font-light text-so-text">{c.value}</p>
-            <div className={`mt-3 h-0.5 w-8 rounded ${c.dot} opacity-60`} />
+
+      {/* Vencimientos próximos */}
+      <div className="card px-5 py-4 border-t-2 border-t-amber-600">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-[10px] text-so-muted tracking-widest uppercase leading-snug">
+            Vencimientos<br />próximos
+          </p>
+          <div className="w-7 h-7 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+            <AlertTriangle size={13} className="text-amber-400" />
           </div>
-        )
-      })}
+        </div>
+        <p className="text-3xl font-light text-so-text tabular-nums">{kpis.en7dias}</p>
+        <p className="text-[10px] text-so-muted mt-1">en los próximos 7 días</p>
+      </div>
+
+      {/* Audiencias próximas */}
+      <div className="card px-5 py-4 border-t-2 border-t-blue-600">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-[10px] text-so-muted tracking-widest uppercase leading-snug">
+            Audiencias<br />próximas
+          </p>
+          <div className="w-7 h-7 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+            <Calendar size={13} className="text-blue-400" />
+          </div>
+        </div>
+        <p className="text-3xl font-light text-so-text tabular-nums">{kpis.audSemana}</p>
+        <p className="text-[10px] text-so-muted mt-1">esta semana</p>
+      </div>
+
+      {/* Novedades PJN */}
+      <div className="card px-5 py-4 border-t-2 border-t-so-ash/60">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-[10px] text-so-muted tracking-widest uppercase leading-snug">
+            Novedades<br />PJN
+          </p>
+          <div className="w-7 h-7 rounded-full bg-so-ash/10 flex items-center justify-center flex-shrink-0">
+            <Zap size={13} className="text-so-ash" />
+          </div>
+        </div>
+        {hasPjn ? (
+          <>
+            <p className="text-3xl font-light text-so-text tabular-nums">—</p>
+            <a href="/pjn" className="text-[10px] text-so-ash hover:text-so-ashLight mt-1 flex items-center gap-0.5 transition-colors w-fit">
+              Ver actuaciones <ChevronRight size={10} />
+            </a>
+          </>
+        ) : (
+          <>
+            <p className="text-2xl font-light text-so-muted mt-1">Sin conectar</p>
+            <a href="/perfil" className="text-[10px] text-so-ash hover:text-so-ashLight mt-1 flex items-center gap-0.5 transition-colors w-fit">
+              Conectar PJN <ChevronRight size={10} />
+            </a>
+          </>
+        )}
+      </div>
+
+      {/* Expedientes activos */}
+      <div className="card px-5 py-4 border-t-2 border-t-emerald-600">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-[10px] text-so-muted tracking-widest uppercase leading-snug">
+            Expedientes<br />activos
+          </p>
+          <div className="w-7 h-7 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+            <CheckCircle size={13} className="text-emerald-400" />
+          </div>
+        </div>
+        <p className="text-3xl font-light text-so-text tabular-nums">{kpis.activos.toLocaleString('es-AR')}</p>
+        <p className="text-[10px] text-so-muted mt-1">de {kpis.total.toLocaleString('es-AR')} totales</p>
+      </div>
+
     </div>
   )
 }

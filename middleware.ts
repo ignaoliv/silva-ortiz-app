@@ -1,7 +1,7 @@
 import { withAuth } from 'next-auth/middleware'
 
 const ALLOWED_DOMAIN = '@silvaortiz.com.ar'
-const ALLOWED_EMAILS = ['dji.olivieri@gmail.com']
+const ALLOWED_EMAILS: string[] = []
 
 export default withAuth({
   pages: {
@@ -23,8 +23,12 @@ export const config = {
     '/clientes/:path*',
     '/pjn/:path*',
     '/perfil/:path*',
+    '/admin/:path*',
     '/api/casos/:path*',
     '/api/pjn/:path*',
+    '/api/pjn/sync/:path*',
+    '/api/pjn/sync-status/:path*',
     '/api/perfil/:path*',
+    '/api/feedback/:path*',
   ],
 }

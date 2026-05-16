@@ -549,7 +549,7 @@ export async function hasPjnCredentials(email: string): Promise<boolean> {
   return (rows?.[0]?.n ?? 0) > 0
 }
 
-export async function getPjnSyncLog(): Promise<{ fechaInicio: string; estado: string; expedientes: number; actuacionesNew: number; error: string | null }[]> {
+export async function getPjnSyncLog(): Promise<{ fechaInicio: Date; estado: string; expedientes: number; actuacionesNew: number; error: string | null }[]> {
   const rows = await query<Record<string, unknown>>(`
     SELECT TOP 5 fecha_inicio, estado, expedientes, actuaciones_new, error
     FROM pjn_sync_log
@@ -557,10 +557,115 @@ export async function getPjnSyncLog(): Promise<{ fechaInicio: string; estado: st
   `)
   if (!rows) return []
   return rows.map(r => ({
-    fechaInicio:   String(r.fecha_inicio).split('T')[0],
-    estado:        r.estado as string,
-    expedientes:   Number(r.expedientes),
+    fechaInicio:    r.fecha_inicio as Date,
+    estado:         r.estado as string,
+    expedientes:    Number(r.expedientes),
     actuacionesNew: Number(r.actuaciones_new),
-    error:         r.error as string | null,
+    error:          r.error as string | null,
   }))
+}
+
+// ── Feedback ──────────────────────────────────────────────────────────────────
+
+export interface DBFeedback {
+  id:            number
+  tipo:          string
+  mensaje:       string
+  pagina:        string | null
+  emailUsuario:  string
+  nombreUsuario: string | null
+  leido:         boolean
+  fechaCreacion: string
+}
+
+export async function insertFeedback(
+  tipo: string,
+  mensaje: string,
+  pagina: string | null,
+  email: string,
+  nombre: string | null,
+): Promise<void> {
+  const esc = (s: string | null) => (s ?? '').replace(/'/g, "''")
+  await execute(`
+    INSERT INTO feedback (tipo, mensaje, pagina, email_usuario, nombre_usuario)
+    VALUES (
+      '${esc(tipo)}',
+      '${esc(mensaje)}',
+      ${pagina ? `'${esc(pagina)}'` : 'NULL'},
+      '${esc(email)}',
+      ${nombre ? `'${esc(nombre)}'` : 'NULL'}
+    )
+  `)
+}
+
+export async function getFeedback(): Promise<DBFeedback[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id, tipo, mensaje, pagina, email_usuario, nombre_usuario, leido, fecha_creacion
+    FROM feedback
+    ORDER BY fecha_creacion DESC
+  `)
+  if (!rows) return []
+  return rows.map(r => ({
+    id:            Number(r.id),
+    tipo:          String(r.tipo),
+    mensaje:       String(r.mensaje),
+    pagina:        r.pagina as string | null,
+    emailUsuario:  String(r.email_usuario),
+    nombreUsuario: r.nombre_usuario as string | null,
+    leido:         Boolean(r.leido),
+    fechaCreacion: String(r.fecha_creacion),
+  }))
+}
+
+export async function markFeedbackLeido(id: number, leido: boolean): Promise<void> {
+  await execute(`UPDATE feedback SET leido = ${leido ? 1 : 0} WHERE id = ${id}`)
+}
+
+export async function deleteFeedback(id: number): Promise<void> {
+  await execute(`DELETE FROM feedback WHERE id = ${id}`)
+}
+
+export async function countFeedbackNoLeido(): Promise<number> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT COUNT(*) AS n FROM feedback WHERE leido = 0
+  `)
+  return Number(rows?.[0]?.n ?? 0)
+}
+
+export interface PjnUserStatus {
+  conectado:      boolean
+  sincronizando:  boolean          // hay un row con fecha_fin NULL (scraper corriendo)
+  estadoUltimoSync: 'ok' | 'error' | null
+  fechaUltimoSync:  string | null  // ISO
+  horasDesdeSync:   number | null
+  actuacionesNew:   number
+}
+
+export async function getPjnUserStatus(email: string): Promise<PjnUserStatus> {
+  const conectado = await hasPjnCredentials(email)
+
+  const rows = await query<Record<string, unknown>>(`
+    SELECT TOP 1 fecha_inicio, fecha_fin, estado, actuaciones_new
+    FROM pjn_sync_log
+    WHERE email_usuario = '${email.replace(/'/g, "''")}'
+    ORDER BY fecha_inicio DESC
+  `)
+  const row = rows?.[0]
+  if (!row) {
+    return { conectado, sincronizando: false, estadoUltimoSync: null, fechaUltimoSync: null, horasDesdeSync: null, actuacionesNew: 0 }
+  }
+  const fechaFinDate    = row.fecha_fin ? (row.fecha_fin as Date) : null
+  const fechaInicioDate = row.fecha_inicio as Date
+  const sincronizando   = !fechaFinDate
+  const horasDesdeSync  = fechaFinDate
+    ? (Date.now() - fechaFinDate.getTime()) / 3600000
+    : null
+  return {
+    conectado,
+    sincronizando,
+    estadoUltimoSync: row.estado as 'ok' | 'error' | null,
+    fechaUltimoSync:  (fechaFinDate ?? fechaInicioDate).toISOString(),
+    horasDesdeSync,
+    actuacionesNew:   Number(row.actuaciones_new ?? 0),
+  }
 }

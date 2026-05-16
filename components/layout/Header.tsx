@@ -8,6 +8,7 @@ import { LogOut, User, Sun, Moon } from 'lucide-react'
 import { initials } from '@/lib/utils'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from 'next-themes'
+import PjnStatusIndicator from './PjnStatusIndicator'
 
 const NAV = [
   { href: '/expedientes', label: 'Expedientes' },
@@ -68,10 +69,8 @@ export default function Header({ user }: { user: Session['user'] }) {
           ))}
         </nav>
 
-        {/* Badge sistema */}
-        <span className="text-[10px] tracking-widest uppercase text-so-muted hidden md:block">
-          Sistema de gestión
-        </span>
+        {/* PJN Status */}
+        <PjnStatusIndicator />
 
         {/* Theme toggle */}
         {mounted && (

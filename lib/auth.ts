@@ -2,7 +2,7 @@ import type { NextAuthOptions } from 'next-auth'
 import AzureADProvider from 'next-auth/providers/azure-ad'
 
 const ALLOWED_DOMAIN = '@silvaortiz.com.ar'
-const ALLOWED_EMAILS = ['dji.olivieri@gmail.com']
+const ALLOWED_EMAILS: string[] = []
 
 export const authOptions: NextAuthOptions = {
   providers: [
