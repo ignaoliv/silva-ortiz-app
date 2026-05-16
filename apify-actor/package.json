@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "main": "main.mjs",
+  "scripts": {
+    "start": "node main.mjs"
+  },
   "dependencies": {
     "apify": "^3.2.2",
     "playwright": "^1.44.0",

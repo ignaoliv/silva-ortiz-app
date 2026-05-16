@@ -23,11 +23,12 @@ if (!DATABASE_URL)   { console.error('❌ DATABASE_URL no configurado'); await A
 if (!ENCRYPTION_KEY) { console.error('❌ ENCRYPTION_KEY no configurado'); await Actor.exit(); process.exit(1) }
 if (!AZURE_STORAGE_CONN_STR) console.warn('⚠️  AZURE_STORAGE_CONN_STR no configurado — documentos no se subirán')
 
-// ── Proxy residencial argentino ────────────────────────────────────
-const proxyConfiguration = await Actor.createProxyConfiguration({
-  groups: ['RESIDENTIAL'],
-  countryCode: 'AR',
-})
+// ── Proxy: usar IPs directas de Apify (limpias y sin bloqueos) ─────
+// El proxy residencial AR requiere plan SCALE+. Por ahora se usa conexión
+// directa desde los servidores de Apify. Se puede activar proxy editando
+// la variable proxyUrl más abajo si se upgradea el plan.
+const proxyUrl = undefined
+console.log('🌐 Conexión directa desde servidores Apify')
 
 // ── Azure Blob ─────────────────────────────────────────────────────
 let blobContainer = null
@@ -271,9 +272,6 @@ async function main() {
   if (credenciales.length === 0) { console.log('⚠️  Sin credenciales'); return }
   console.log(`👥 ${credenciales.length} usuario(s)`)
 
-  // Obtener URL de proxy residencial AR
-  const proxyUrl = proxyConfiguration ? await proxyConfiguration.newUrl() : undefined
-
   const browser = await chromium.launch({
     headless: true,
     args: proxyUrl ? [`--proxy-server=${proxyUrl}`] : [],
@@ -299,7 +297,7 @@ async function main() {
       // ── 1. Login ───────────────────────────────────────────
       console.log('  🔐 Login...')
       await page.goto('https://portalpjn.pjn.gov.ar', { waitUntil: 'networkidle', timeout: 30000 })
-      await page.waitForSelector('input[name="username"]', { timeout: 10000 })
+      await page.waitForSelector('input[name="username"]', { timeout: 15000 })
       await page.fill('input[name="username"]', cuit)
       await page.fill('input[name="password"]', password)
       await page.click('button[type="submit"], input[type="submit"]')
