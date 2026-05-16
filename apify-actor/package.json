@@ -1,0 +1,15 @@
+{
+  "name": "pjn-scraper-silva-ortiz",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "main.mjs",
+  "dependencies": {
+    "apify": "^3.2.2",
+    "playwright": "^1.44.0",
+    "mssql": "^11.0.1",
+    "@azure/storage-blob": "^12.24.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "actorSpecification": 1,
+  "name": "pjn-scraper-silva-ortiz",
+  "title": "PJN Scraper — Silva Ortiz",
+  "description": "Sincroniza expedientes y actuaciones del Poder Judicial de la Nación con proxy residencial argentino.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "environmentVariables": {},
+  "dockerfile": "./Dockerfile"
+}

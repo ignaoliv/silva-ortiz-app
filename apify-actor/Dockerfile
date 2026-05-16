@@ -1,0 +1,15 @@
+FROM apify/actor-node-playwright-chrome:20
+
+COPY package*.json ./
+RUN npm --quiet set progress=false \
+  && npm install --only=prod --no-optional \
+  && echo "Installed NPM packages:" \
+  && npm list \
+  && echo "Node.js version:" \
+  && node --version \
+  && echo "NPM version:" \
+  && npm --version
+
+COPY . ./
+
+CMD npm start
