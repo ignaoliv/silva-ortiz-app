@@ -8,6 +8,10 @@ import { chromium } from 'playwright'
 import sql from 'mssql'
 import crypto from 'crypto'
 import { BlobServiceClient, BlobSASPermissions } from '@azure/storage-blob'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const pdfParse = require('pdf-parse')
 
 await Actor.init()
 
@@ -88,7 +92,22 @@ function esc(s, max = 499) {
   return (String(s || '')).replace(/'/g, "''").substring(0, max)
 }
 
+// ── Extraer texto de un buffer PDF ────────────────────────────────
+async function extraerTextoPDF(buffer) {
+  try {
+    const data = await pdfParse(buffer)
+    const texto = data.text?.trim() ?? ''
+    if (texto.length < 10) return null
+    console.log(`          📝 Texto extraído: ${texto.length} caracteres`)
+    return texto
+  } catch (e) {
+    console.warn(`          ⚠️  No se pudo extraer texto del PDF: ${e.message.substring(0, 80)}`)
+    return null
+  }
+}
+
 // ── PDF download ───────────────────────────────────────────────────
+// Retorna { blobUrl, textoExtraido }
 async function descargarPorHref(page, href, nroExp, fecha, idx) {
   try {
     const url = href.startsWith('http') ? href : `https://scw.pjn.gov.ar${href}`
@@ -97,15 +116,18 @@ async function descargarPorHref(page, href, nroExp, fecha, idx) {
       if (!r.ok) return null
       return Array.from(new Uint8Array(await r.arrayBuffer()))
     }, url)
-    if (!arr || arr.length < 500) return null
+    if (!arr || arr.length < 500) return { blobUrl: null, textoExtraido: null }
     const pdfBuffer = Buffer.from(arr)
     const nombre    = `${nroExp.replace(/\s/g, '_')}_${fecha.replace(/\//g, '-')}_${idx}.pdf`
-    const blobUrl   = await subirPDF(pdfBuffer, nombre)
+    const [blobUrl, textoExtraido] = await Promise.all([
+      subirPDF(pdfBuffer, nombre),
+      extraerTextoPDF(pdfBuffer),
+    ])
     if (blobUrl) console.log(`          ☁️  Subido: ${blobUrl.split('?')[0]}`)
-    return blobUrl
+    return { blobUrl, textoExtraido }
   } catch (e) {
     console.warn(`          ⚠️  Error descarga: ${e.message.substring(0, 80)}`)
-    return null
+    return { blobUrl: null, textoExtraido: null }
   }
 }
 
@@ -211,12 +233,15 @@ async function extraerActuacionesExpediente(page, nroExp, idPjnExp) {
 
     console.log(`        📄 [${i+1}/${items.length}] ${item.fecha} — ${item.descripcion.substring(0, 55)}${item.dlHref ? ' ⬇️' : ''}${yaEnDB ? ' (sin PDF)' : ' 🆕'}`)
 
-    let urlBlob = yaBlob || null
+    let urlBlob       = yaBlob || null
+    let textoExtraido = null
     if (item.dlHref && !yaBlob) {
-      urlBlob = await descargarPorHref(page, item.dlHref, nroExp, item.fecha, i)
+      const dl = await descargarPorHref(page, item.dlHref, nroExp, item.fecha, i)
+      urlBlob       = dl.blobUrl
+      textoExtraido = dl.textoExtraido
       await page.waitForTimeout(500)
     }
-    resultado.push({ ...item, urlBlob })
+    resultado.push({ ...item, urlBlob, textoExtraido })
   }
 
   return resultado
@@ -237,11 +262,14 @@ async function guardarActuaciones(idPjnExp, actuaciones) {
         AND fecha   = '${fechaISO}'
         AND detalle = '${detEsc}'
     `)
-    const blobEsc = esc(a.urlBlob || '', 999)
+    const blobEsc  = esc(a.urlBlob || '', 999)
+    const textoEsc = a.textoExtraido ? esc(a.textoExtraido, 99999) : null
     if (exists.length === 0) {
       await dbQuery(`
-        INSERT INTO pjn_actuaciones (id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob)
-        VALUES (${idPjnExp}, '${fechaISO}', '${tipoEsc}', '${detEsc}', '${fojEsc}', ${blobEsc ? `'${blobEsc}'` : 'NULL'})
+        INSERT INTO pjn_actuaciones (id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob, texto_extraido)
+        VALUES (${idPjnExp}, '${fechaISO}', '${tipoEsc}', '${detEsc}', '${fojEsc}',
+                ${blobEsc ? `'${blobEsc}'` : 'NULL'},
+                ${textoEsc ? `'${textoEsc}'` : 'NULL'})
       `)
       nuevas++
       const expRow = await dbQuery(`SELECT id_caso FROM pjn_expedientes WHERE id = ${idPjnExp}`)
@@ -255,7 +283,8 @@ async function guardarActuaciones(idPjnExp, actuaciones) {
       }
     } else if (blobEsc && a.urlBlob) {
       await dbQuery(`
-        UPDATE pjn_actuaciones SET url_blob='${blobEsc}'
+        UPDATE pjn_actuaciones
+        SET url_blob='${blobEsc}'${textoEsc ? `, texto_extraido='${textoEsc}'` : ''}
         WHERE id_pjn_expediente=${idPjnExp} AND fecha='${fechaISO}' AND detalle='${detEsc}'
           AND url_blob IS NULL
       `).catch(() => {})

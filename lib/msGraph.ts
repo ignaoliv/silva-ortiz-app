@@ -1,10 +1,13 @@
 /**
  * Microsoft Graph API — helper para calendario
- * Usa el access token de la sesión (delegado, no application)
+ * Usa el access token de la sesión (delegado, no application).
+ * Todos los eventos se escriben en un calendario dedicado "Silva Ortiz"
+ * — nunca se toca el calendario principal del usuario.
  */
 
-const GRAPH = 'https://graph.microsoft.com/v1.0'
-const CAL_CATEGORY = 'Silva Ortiz' // categoría de color para identificar eventos
+const GRAPH       = 'https://graph.microsoft.com/v1.0'
+const CAL_NAME    = 'Silva Ortiz'
+const EXT_ID_PROP = 'String {00020329-0000-0000-C000-000000000046} Name SilvaOrtizId'
 
 // ── Tipos Graph ────────────────────────────────────────────────────
 
@@ -16,7 +19,6 @@ export interface GraphEvent {
   end:       { dateTime: string; timeZone: string }
   location?: { displayName: string }
   isAllDay?: boolean
-  categories?: string[]
   singleValueExtendedProperties?: Array<{ id: string; value: string }>
 }
 
@@ -37,21 +39,50 @@ async function graphFetch(
   })
 }
 
-// ── Buscar evento por extensión (nuestro ID interno) ──────────────
-// Usamos una SingleValueExtendedProperty para trackear qué eventos creamos nosotros
+// ── Calendario dedicado "Silva Ortiz" ─────────────────────────────
+// Busca el calendario por nombre; si no existe, lo crea.
+// El código NUNCA escribe en ningún otro calendario.
 
-const EXT_ID_PROP = 'String {00020329-0000-0000-C000-000000000046} Name SilvaOrtizId'
+export async function getOrCreateCalendar(accessToken: string): Promise<string | null> {
+  // Listar calendarios del usuario
+  const res = await graphFetch(accessToken, '/me/calendars?$select=id,name&$top=50')
+  if (!res.ok) {
+    console.error('[msGraph] Error listando calendarios:', res.status)
+    return null
+  }
+  const data = await res.json()
+  const existing = (data.value as Array<{ id: string; name: string }>)
+    .find(c => c.name === CAL_NAME)
 
-export async function findEventBySilvaId(
-  accessToken: string,
-  silvaId:     string
+  if (existing) return existing.id
+
+  // Crear calendario dedicado
+  const create = await graphFetch(accessToken, '/me/calendars', {
+    method: 'POST',
+    body:   JSON.stringify({ name: CAL_NAME }),
+  })
+  if (!create.ok) {
+    console.error('[msGraph] Error creando calendario:', create.status, await create.text())
+    return null
+  }
+  const created = await create.json()
+  console.log('[msGraph] Calendario "Silva Ortiz" creado:', created.id)
+  return created.id
+}
+
+// ── Buscar evento por extensión dentro del calendario dedicado ────
+
+async function findEventBySilvaId(
+  accessToken:  string,
+  calendarId:   string,
+  silvaId:      string
 ): Promise<string | null> {
   const filter = encodeURIComponent(
     `singleValueExtendedProperties/Any(ep: ep/id eq '${EXT_ID_PROP}' and ep/value eq '${silvaId}')`
   )
   const res = await graphFetch(
     accessToken,
-    `/me/events?$filter=${filter}&$select=id&$top=1` +
+    `/me/calendars/${calendarId}/events?$filter=${filter}&$select=id&$top=1` +
     `&$expand=singleValueExtendedProperties($filter=id eq '${EXT_ID_PROP}')`,
   )
   if (!res.ok) return null
@@ -59,16 +90,18 @@ export async function findEventBySilvaId(
   return data.value?.[0]?.id ?? null
 }
 
-// ── Crear evento ──────────────────────────────────────────────────
+// ── Crear evento en el calendario dedicado ────────────────────────
 
-export async function createEvent(
+async function createEvent(
   accessToken: string,
+  calendarId:  string,
   event:       GraphEvent
 ): Promise<string | null> {
-  const res = await graphFetch(accessToken, '/me/events', {
-    method: 'POST',
-    body:   JSON.stringify({ ...event, categories: [CAL_CATEGORY] }),
-  })
+  const res = await graphFetch(
+    accessToken,
+    `/me/calendars/${calendarId}/events`,
+    { method: 'POST', body: JSON.stringify(event) }
+  )
   if (!res.ok) {
     console.error('[msGraph] createEvent error', res.status, await res.text())
     return null
@@ -79,11 +112,12 @@ export async function createEvent(
 
 // ── Actualizar evento ─────────────────────────────────────────────
 
-export async function updateEvent(
+async function updateEvent(
   accessToken: string,
   eventId:     string,
   patch:       Partial<GraphEvent>
 ): Promise<boolean> {
+  // PATCH sobre /me/events/{id} funciona independientemente del calendario
   const res = await graphFetch(accessToken, `/me/events/${eventId}`, {
     method: 'PATCH',
     body:   JSON.stringify(patch),
@@ -91,34 +125,22 @@ export async function updateEvent(
   return res.ok
 }
 
-// ── Borrar evento ─────────────────────────────────────────────────
-
-export async function deleteEvent(
-  accessToken: string,
-  eventId:     string
-): Promise<boolean> {
-  const res = await graphFetch(accessToken, `/me/events/${eventId}`, {
-    method: 'DELETE',
-  })
-  return res.status === 204
-}
-
-// ── Upsert: crea o actualiza según si ya existe ────────────────────
+// ── Upsert: crea o actualiza, siempre dentro del calendario dedicado
 
 export async function upsertEvent(
   accessToken: string,
-  silvaId:     string,   // ej: "audiencia-42" o "venc-caso-17"
+  calendarId:  string,
+  silvaId:     string,
   event:       GraphEvent
 ): Promise<{ action: 'created' | 'updated' | 'error'; eventId?: string }> {
   const eventWithExt: GraphEvent = {
     ...event,
-    categories: [CAL_CATEGORY],
     singleValueExtendedProperties: [
       { id: EXT_ID_PROP, value: silvaId },
     ],
   }
 
-  const existingId = await findEventBySilvaId(accessToken, silvaId)
+  const existingId = await findEventBySilvaId(accessToken, calendarId, silvaId)
 
   if (existingId) {
     const ok = await updateEvent(accessToken, existingId, eventWithExt)
@@ -127,7 +149,7 @@ export async function upsertEvent(
       : { action: 'error' }
   }
 
-  const newId = await createEvent(accessToken, eventWithExt)
+  const newId = await createEvent(accessToken, calendarId, eventWithExt)
   return newId
     ? { action: 'created', eventId: newId }
     : { action: 'error' }
@@ -139,31 +161,30 @@ const TZ = 'America/Argentina/Buenos_Aires'
 
 /** Audiencia → GraphEvent */
 export function audienciaToEvent(a: {
-  id:       number
-  caratula: string
-  tipo:     string
-  fecha:    string    // 'YYYY-MM-DD'
-  hora:     string    // 'HH:MM'
-  lugar:    string
+  id:        number
+  caratula:  string
+  tipo:      string
+  fecha:     string   // 'YYYY-MM-DD'
+  hora:      string   // 'HH:MM'
+  lugar:     string
   modalidad: string
-  abogado:  string
+  abogado:   string
 }): GraphEvent {
   const startDT = `${a.fecha}T${a.hora.padEnd(5, '0')}:00`
-  // Duración por defecto: 1 hora
-  const endHour  = (parseInt(a.hora.slice(0, 2)) + 1).toString().padStart(2, '0')
-  const endDT    = `${a.fecha}T${endHour}:${a.hora.slice(3, 5)}:00`
+  const endHour = (parseInt(a.hora.slice(0, 2)) + 1).toString().padStart(2, '0')
+  const endDT   = `${a.fecha}T${endHour}:${a.hora.slice(3, 5)}:00`
 
   return {
     subject: `Audiencia — ${a.caratula}`,
     body: {
       contentType: 'HTML',
-      content: `
-        <b>Tipo:</b> ${a.tipo}<br>
-        <b>Expediente:</b> ${a.caratula}<br>
-        <b>Modalidad:</b> ${a.modalidad}<br>
-        <b>Abogado:</b> ${a.abogado}<br>
-        <b>Lugar:</b> ${a.lugar}
-      `.trim(),
+      content: [
+        `<b>Tipo:</b> ${a.tipo}`,
+        `<b>Expediente:</b> ${a.caratula}`,
+        `<b>Modalidad:</b> ${a.modalidad}`,
+        `<b>Abogado:</b> ${a.abogado}`,
+        `<b>Lugar:</b> ${a.lugar}`,
+      ].join('<br>'),
     },
     start:    { dateTime: startDT, timeZone: TZ },
     end:      { dateTime: endDT,   timeZone: TZ },
@@ -171,24 +192,23 @@ export function audienciaToEvent(a: {
   }
 }
 
-/** Vencimiento de caso → GraphEvent (todo el día) */
+/** Vencimiento de caso → GraphEvent */
 export function vencimientoToEvent(c: {
-  idCaso:    number
-  caratula:  string
-  vencimiento: string   // 'YYYY-MM-DD'
+  idCaso:       number
+  caratula:     string
+  vencimiento:  string  // 'YYYY-MM-DD'
   responsable?: string
 }): GraphEvent {
   return {
-    subject:  `Vencimiento — ${c.caratula}`,
+    subject: `Vencimiento — ${c.caratula}`,
     body: {
       contentType: 'HTML',
-      content: `
-        <b>Expediente:</b> ${c.caratula}<br>
-        ${c.responsable ? `<b>Responsable:</b> ${c.responsable}` : ''}
-      `.trim(),
+      content: [
+        `<b>Expediente:</b> ${c.caratula}`,
+        c.responsable ? `<b>Responsable:</b> ${c.responsable}` : '',
+      ].filter(Boolean).join('<br>'),
     },
-    start:    { dateTime: `${c.vencimiento}T09:00:00`, timeZone: TZ },
-    end:      { dateTime: `${c.vencimiento}T09:30:00`, timeZone: TZ },
-    isAllDay: false,
+    start: { dateTime: `${c.vencimiento}T09:00:00`, timeZone: TZ },
+    end:   { dateTime: `${c.vencimiento}T09:30:00`, timeZone: TZ },
   }
 }

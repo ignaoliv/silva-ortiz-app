@@ -492,13 +492,14 @@ export interface DBPjnExpediente {
 }
 
 export interface DBPjnActuacion {
-  id:          number
-  idExpediente: number
-  fecha:       string
-  tipo:        string
-  detalle:     string
-  fojas:       string
-  urlBlob:     string | null
+  id:            number
+  idExpediente:  number
+  fecha:         string
+  tipo:          string
+  detalle:       string
+  fojas:         string
+  urlBlob:       string | null
+  textoExtraido: string | null
 }
 
 export async function getPjnExpedientes(email: string): Promise<DBPjnExpediente[]> {
@@ -524,7 +525,7 @@ export async function getPjnExpedientes(email: string): Promise<DBPjnExpediente[
 
 export async function getPjnActuaciones(idExpediente: number): Promise<DBPjnActuacion[]> {
   const rows = await query<Record<string, unknown>>(`
-    SELECT id, id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob
+    SELECT id, id_pjn_expediente, fecha, tipo, detalle, fojas, url_blob, texto_extraido
     FROM pjn_actuaciones
     WHERE id_pjn_expediente = ${idExpediente}
     ORDER BY fecha DESC
@@ -537,7 +538,8 @@ export async function getPjnActuaciones(idExpediente: number): Promise<DBPjnActu
     tipo:         r.tipo as string,
     detalle:      r.detalle as string,
     fojas:        r.fojas as string,
-    urlBlob:      r.url_blob as string | null,
+    urlBlob:       r.url_blob       as string | null,
+    textoExtraido: r.texto_extraido as string | null,
   }))
 }
 
