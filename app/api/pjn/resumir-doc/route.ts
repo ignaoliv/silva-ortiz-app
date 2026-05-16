@@ -13,34 +13,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurado' }, { status: 503 })
   }
 
-  const { blobUrl, titulo } = await req.json()
+  const { blobUrl, titulo, textoExtraido } = await req.json()
   if (!blobUrl) return NextResponse.json({ error: 'Falta blobUrl' }, { status: 400 })
 
-  // Descargar el PDF desde Azure Blob
-  let pdfBuffer: Buffer
-  try {
-    const res = await fetch(blobUrl)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    pdfBuffer = Buffer.from(await res.arrayBuffer())
-  } catch (e: unknown) {
-    return NextResponse.json({ error: `No se pudo descargar el PDF: ${e instanceof Error ? e.message : e}` }, { status: 502 })
-  }
+  // Usar texto ya extraído (OCR o digital) si está disponible
+  let texto: string = textoExtraido?.trim() ?? ''
 
-  // Extraer texto del PDF
-  let texto = ''
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse')
-    const data = await pdfParse(pdfBuffer)
-    texto = data.text?.trim() ?? ''
-  } catch {
-    texto = ''
+  // Si no hay texto pre-extraído, intentar extraer del PDF en tiempo real
+  if (!texto || texto.length < 30) {
+    try {
+      const res = await fetch(blobUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const pdfBuffer = Buffer.from(await res.arrayBuffer())
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { PDFParse } = require('pdf-parse')
+      const data = await new PDFParse().parse(pdfBuffer)
+      texto = data.text?.trim() ?? ''
+    } catch {
+      texto = ''
+    }
   }
 
   if (!texto || texto.length < 30) {
-    // PDF sin texto (escaneado) — informar al usuario
     return NextResponse.json({
-      error: 'Este documento es una imagen escaneada y no contiene texto extraíble. No es posible resumirlo automáticamente.'
+      error: 'No se pudo extraer texto de este documento. Puede ser un escaneo que aún no fue procesado — intentá de nuevo más tarde.'
     }, { status: 422 })
   }
 

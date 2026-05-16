@@ -5,13 +5,14 @@ import { X, Loader2, Download, Eye } from 'lucide-react'
 import ClaudeIcon from '@/components/ClaudeIcon'
 
 interface Props {
-  blobUrl: string
-  titulo:  string
-  onClose: () => void
-  onVerPdf: () => void
+  blobUrl:        string
+  titulo:         string
+  textoExtraido?: string | null
+  onClose:        () => void
+  onVerPdf:       () => void
 }
 
-export default function DocResumenModal({ blobUrl, titulo, onClose, onVerPdf }: Props) {
+export default function DocResumenModal({ blobUrl, titulo, textoExtraido, onClose, onVerPdf }: Props) {
   const [resumen,  setResumen]  = useState('')
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
@@ -28,7 +29,7 @@ export default function DocResumenModal({ blobUrl, titulo, onClose, onVerPdf }: 
         const res = await fetch('/api/pjn/resumir-doc', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ blobUrl, titulo }),
+          body:    JSON.stringify({ blobUrl, titulo, textoExtraido }),
         })
 
         if (!res.ok) {

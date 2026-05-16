@@ -100,7 +100,7 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState<string | null>(null)
   const [viendoPdf, setViendoPdf]     = useState<{ url: string; titulo: string } | null>(null)
-  const [resumiendo, setResumiendo]   = useState<{ url: string; titulo: string } | null>(null)
+  const [resumiendo, setResumiendo]   = useState<{ url: string; titulo: string; textoExtraido?: string | null } | null>(null)
 
   useEffect(() => {
     fetch(`/api/pjn/actuaciones?id=${idExpediente}`)
@@ -142,6 +142,7 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
         <DocResumenModal
           blobUrl={resumiendo.url}
           titulo={resumiendo.titulo}
+          textoExtraido={resumiendo.textoExtraido}
           onClose={() => setResumiendo(null)}
           onVerPdf={() => {
             setViendoPdf({ url: resumiendo.url, titulo: resumiendo.titulo })
@@ -210,7 +211,7 @@ export default function PjnActuacionesPanel({ idExpediente }: Props) {
                   <>
                     {/* Claude: resumir este PDF */}
                     <button
-                      onClick={() => setResumiendo({ url: act.urlBlob!, titulo: tituloDoc })}
+                      onClick={() => setResumiendo({ url: act.urlBlob!, titulo: tituloDoc, textoExtraido: act.textoExtraido })}
                       className="text-[#D4A847]/50 hover:text-[#D4A847] transition-colors"
                       title="Resumir con Claude IA"
                     >
