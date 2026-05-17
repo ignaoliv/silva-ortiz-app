@@ -34,6 +34,12 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
   const [newMovOpen,   setNewMovOpen]   = useState(false)
 
   useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', esc)
     return () => document.removeEventListener('keydown', esc)
