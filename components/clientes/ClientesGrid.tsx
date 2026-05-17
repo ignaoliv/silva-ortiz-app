@@ -1,5 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Search, Building2, User, Briefcase, Mail, Phone } from 'lucide-react'
 import type { DBCliente, DBCaso } from '@/lib/queries'
 import { Badge } from '@/components/ui/Badge'
@@ -10,17 +11,19 @@ const selectClass = 'bg-so-surface border border-so-border text-so-textMid text-
 const COLORS = ['#82181a','#2563eb','#059669','#d97706','#7c3aed','#0891b2','#dc2626','#0284c7']
 
 export default function ClientesGrid({ clientes, casos }: { clientes: DBCliente[]; casos: DBCaso[] }) {
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [tipo,  setTipo]  = useState('')
+
+  const casosActivos = (id: number) => casos.filter(c => c.clienteId === id && !c.cerrado).length
 
   const filtered = useMemo(() => {
     let rows = clientes
     if (query) rows = rows.filter(c => c.nombre.toLowerCase().includes(query.toLowerCase()) || c.cuit.includes(query))
     if (tipo)  rows = rows.filter(c => c.tipo === tipo)
-    return rows
+    // Ordenar por total de casos desc
+    return [...rows].sort((a, b) => b.casos - a.casos)
   }, [clientes, query, tipo])
-
-  const casosActivos = (id: number) => casos.filter(c => c.clienteId === id && !c.cerrado).length
 
   return (
     <div>
@@ -42,9 +45,14 @@ export default function ClientesGrid({ clientes, casos }: { clientes: DBCliente[
         {filtered.map((c, i) => {
           const activos    = casosActivos(c.id)
           const isJuridica = c.tipo === 'Persona jurídica'
-          const color      = COLORS[i % COLORS.length]
+          const color      = COLORS[c.id % COLORS.length]
           return (
-            <div key={c.id} className="card p-5 hover:border-so-muted transition-colors cursor-default">
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => router.push(`/expedientes?clienteId=${c.id}`)}
+              className="card p-5 hover:border-so-muted hover:bg-so-surface/40 transition-colors text-left w-full group"
+            >
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                      style={{ backgroundColor: color }}>
@@ -80,7 +88,7 @@ export default function ClientesGrid({ clientes, casos }: { clientes: DBCliente[
                 </div>
                 {activos > 0 && <Badge variant="green">{activos} activo{activos !== 1 ? 's' : ''}</Badge>}
               </div>
-            </div>
+            </button>
           )
         })}
       </div>

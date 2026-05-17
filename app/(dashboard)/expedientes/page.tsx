@@ -11,7 +11,13 @@ import { authOptions } from '@/lib/auth'
 
 export const metadata = { title: 'Expedientes · Silva Ortiz' }
 
-export default async function ExpedientesPage() {
+export default async function ExpedientesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ clienteId?: string }>
+}) {
+  const { clienteId: clienteIdParam } = await searchParams
+  const initialClienteId = clienteIdParam ? parseInt(clienteIdParam) : undefined
   const connected = await checkDB(2)
   if (!connected) return <DBError />
 
@@ -71,6 +77,7 @@ export default async function ExpedientesPage() {
         clientes={clientes}
         usuarios={usuarios}
         audiencias={audiencias}
+        initialClienteId={initialClienteId}
       />
     </div>
   )

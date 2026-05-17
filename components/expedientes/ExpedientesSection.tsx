@@ -13,9 +13,10 @@ interface Props {
   clientes: DBCliente[]
   usuarios: DBUsuario[]
   audiencias: DBAudiencia[]
+  initialClienteId?: number
 }
 
-export default function ExpedientesSection({ kpis, hasPjn, enNegociacion, casos, clientes, usuarios, audiencias }: Props) {
+export default function ExpedientesSection({ kpis, hasPjn, enNegociacion, casos, clientes, usuarios, audiencias, initialClienteId }: Props) {
   const [negociacionActive, setNegociacionActive] = useState(false)
 
   return (
@@ -35,6 +36,7 @@ export default function ExpedientesSection({ kpis, hasPjn, enNegociacion, casos,
             usuarios={usuarios}
             negociacionActive={negociacionActive}
             onClearNegociacion={() => setNegociacionActive(false)}
+            initialClienteId={initialClienteId}
           />
         </div>
         <div className="w-72 flex-shrink-0 hidden lg:block">

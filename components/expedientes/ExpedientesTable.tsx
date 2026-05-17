@@ -149,17 +149,24 @@ interface Props {
   usuarios: DBUsuario[]
   negociacionActive?: boolean
   onClearNegociacion?: () => void
+  initialClienteId?: number
 }
 
-export default function ExpedientesTable({ casos, clientes, usuarios, negociacionActive = false, onClearNegociacion }: Props) {
+export default function ExpedientesTable({ casos, clientes, usuarios, negociacionActive = false, onClearNegociacion, initialClienteId }: Props) {
   const fueros       = useMemo(() => Array.from(new Set(casos.map(c => c.fuero))).sort(), [casos])
   const responsables = useMemo(() => Array.from(new Set(casos.map(c => c.responsableNombre))).sort(), [casos])
   const estados      = useMemo(() => Array.from(new Set(casos.map(c => c.estado))).sort(), [casos])
+  const clientesConCasos = useMemo(() =>
+    Array.from(new Map(casos.map(c => [c.clienteId, c.clienteNombre])).entries())
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+    [casos])
 
   const [query,       setQuery]      = useState('')
   const [estado,      setEstado]     = useState('')
   const [fuero,       setFuero]      = useState('')
   const [responsable, setResponsable] = useState('')
+  const [clienteId,   setClienteId]  = useState<number | ''>(initialClienteId ?? '')
   const [sortCol,     setSortCol]    = useState<SortCol>('ultimaActuacion')
   const [sortDir,     setSortDir]    = useState<SortDir>(-1)
   const [page,        setPage]       = useState(1)
@@ -175,10 +182,10 @@ export default function ExpedientesTable({ casos, clientes, usuarios, negociacio
   }
 
   function clearAll() {
-    setQuery(''); setEstado(''); setFuero(''); setResponsable(''); setPage(1)
+    setQuery(''); setEstado(''); setFuero(''); setResponsable(''); setClienteId(''); setPage(1)
   }
 
-  const hasFilters = !!query || !!estado || !!fuero || !!responsable
+  const hasFilters = !!query || !!estado || !!fuero || !!responsable || clienteId !== ''
 
   const filtered = useMemo(() => {
     let rows = casos
@@ -188,8 +195,9 @@ export default function ExpedientesTable({ casos, clientes, usuarios, negociacio
       c.nro.toLowerCase().includes(query.toLowerCase())
     )
     if (!negociacionActive && estado) rows = rows.filter(c => c.estado === estado)
-    if (fuero)       rows = rows.filter(c => c.fuero  === fuero)
-    if (responsable) rows = rows.filter(c => c.responsableNombre === responsable)
+    if (fuero)        rows = rows.filter(c => c.fuero  === fuero)
+    if (responsable)  rows = rows.filter(c => c.responsableNombre === responsable)
+    if (clienteId !== '') rows = rows.filter(c => c.clienteId === clienteId)
     return [...rows].sort((a, b) => {
       let va = '', vb = ''
       if (sortCol === 'nro')             { va = a.nro;                        vb = b.nro }
@@ -201,7 +209,7 @@ export default function ExpedientesTable({ casos, clientes, usuarios, negociacio
       if (sortCol === 'ultimaActuacion') { va = a.ultimaActuacion ?? '0';     vb = b.ultimaActuacion ?? '0' }
       return va < vb ? -sortDir : va > vb ? sortDir : 0
     })
-  }, [casos, query, estado, fuero, responsable, sortCol, sortDir, negociacionActive])
+  }, [casos, query, estado, fuero, responsable, clienteId, sortCol, sortDir, negociacionActive])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows   = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -274,6 +282,14 @@ export default function ExpedientesTable({ casos, clientes, usuarios, negociacio
 
           {/* Filter row */}
           <div className="flex flex-wrap items-center gap-2 mt-3">
+            <select
+              value={clienteId}
+              onChange={e => { setClienteId(e.target.value === '' ? '' : parseInt(e.target.value)); setPage(1) }}
+              className={selectCls}
+            >
+              <option value="">Cliente</option>
+              {clientesConCasos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
             <select value={estado} onChange={e => { setEstado(e.target.value); setPage(1) }} className={selectCls}>
               <option value="">Estado procesal</option>
               {estados.map(e => <option key={e} value={e}>{e}</option>)}
@@ -288,9 +304,10 @@ export default function ExpedientesTable({ casos, clientes, usuarios, negociacio
             </select>
 
             {/* Active chips */}
-            {estado      && <Chip label="Estado"      value={estado}      onClear={() => { setEstado('');      setPage(1) }} />}
-            {fuero        && <Chip label="Fuero"       value={fuero}       onClear={() => { setFuero('');       setPage(1) }} />}
-            {responsable  && <Chip label="Responsable" value={responsable} onClear={() => { setResponsable(''); setPage(1) }} />}
+            {clienteId !== '' && <Chip label="Cliente"     value={clientesConCasos.find(c => c.id === clienteId)?.nombre ?? String(clienteId)} onClear={() => { setClienteId(''); setPage(1) }} />}
+            {estado           && <Chip label="Estado"      value={estado}      onClear={() => { setEstado('');      setPage(1) }} />}
+            {fuero            && <Chip label="Fuero"       value={fuero}       onClear={() => { setFuero('');       setPage(1) }} />}
+            {responsable      && <Chip label="Responsable" value={responsable} onClear={() => { setResponsable(''); setPage(1) }} />}
 
             {hasFilters && (
               <button
