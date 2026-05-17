@@ -148,9 +148,10 @@ interface Props { casos: DBCaso[]; clientes: DBCliente[]; usuarios: DBUsuario[] 
 export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
   const fueros       = useMemo(() => Array.from(new Set(casos.map(c => c.fuero))).sort(), [casos])
   const responsables = useMemo(() => Array.from(new Set(casos.map(c => c.responsableNombre))).sort(), [casos])
+  const estados      = useMemo(() => Array.from(new Set(casos.map(c => c.estado))).sort(), [casos])
 
   const [query,       setQuery]      = useState('')
-  const [cerrado,     setCerrado]    = useState('')   // '' | 'activo' | 'cerrado'
+  const [estado,      setEstado]     = useState('')
   const [fuero,       setFuero]      = useState('')
   const [responsable, setResponsable] = useState('')
   const [sortCol,     setSortCol]    = useState<SortCol>('ultimaActuacion')
@@ -165,10 +166,10 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
   }
 
   function clearAll() {
-    setQuery(''); setCerrado(''); setFuero(''); setResponsable(''); setPage(1)
+    setQuery(''); setEstado(''); setFuero(''); setResponsable(''); setPage(1)
   }
 
-  const hasFilters = !!query || !!cerrado || !!fuero || !!responsable
+  const hasFilters = !!query || !!estado || !!fuero || !!responsable
 
   const filtered = useMemo(() => {
     let rows = casos
@@ -176,8 +177,7 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
       c.caratula.toLowerCase().includes(query.toLowerCase()) ||
       c.nro.toLowerCase().includes(query.toLowerCase())
     )
-    if (cerrado === 'activo')   rows = rows.filter(c => !c.cerrado)
-    if (cerrado === 'cerrado')  rows = rows.filter(c =>  c.cerrado)
+    if (estado)      rows = rows.filter(c => c.estado === estado)
     if (fuero)       rows = rows.filter(c => c.fuero  === fuero)
     if (responsable) rows = rows.filter(c => c.responsableNombre === responsable)
     return [...rows].sort((a, b) => {
@@ -191,7 +191,7 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
       if (sortCol === 'ultimaActuacion') { va = a.ultimaActuacion ?? '0';     vb = b.ultimaActuacion ?? '0' }
       return va < vb ? -sortDir : va > vb ? sortDir : 0
     })
-  }, [casos, query, cerrado, fuero, responsable, sortCol, sortDir])
+  }, [casos, query, estado, fuero, responsable, sortCol, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows   = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -255,10 +255,9 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
 
           {/* Filter row */}
           <div className="flex flex-wrap items-center gap-2 mt-3">
-            <select value={cerrado} onChange={e => { setCerrado(e.target.value); setPage(1) }} className={selectCls}>
-              <option value="">Estado</option>
-              <option value="activo">Activos</option>
-              <option value="cerrado">Cerrados</option>
+            <select value={estado} onChange={e => { setEstado(e.target.value); setPage(1) }} className={selectCls}>
+              <option value="">Estado procesal</option>
+              {estados.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
             <select value={fuero} onChange={e => { setFuero(e.target.value); setPage(1) }} className={selectCls}>
               <option value="">Fuero</option>
@@ -270,7 +269,7 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
             </select>
 
             {/* Active chips */}
-            {cerrado     && <Chip label="Estado"      value={cerrado === 'activo' ? 'Activos' : 'Cerrados'} onClear={() => { setCerrado('');     setPage(1) }} />}
+            {estado      && <Chip label="Estado"      value={estado}      onClear={() => { setEstado('');      setPage(1) }} />}
             {fuero        && <Chip label="Fuero"       value={fuero}       onClear={() => { setFuero('');       setPage(1) }} />}
             {responsable  && <Chip label="Responsable" value={responsable} onClear={() => { setResponsable(''); setPage(1) }} />}
 
