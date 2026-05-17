@@ -845,6 +845,41 @@ export async function getJurisdicciones(): Promise<DBJurisdiccion[]> {
   return rows.map(r => ({ id: r.id_jurisdiccion as number, nombre: r.nombre as string }))
 }
 
+// ── Actualizar caso ──────────────────────────────────────────────────────────
+
+export async function updateCaso(id: number, data: {
+  caratula?: string
+  idCliente?: number
+  idAbogadoResponsable?: number
+  nroInterno?: string | null
+  nroExpediente?: string | null
+  idFuero?: number | null
+  idJuzgado?: number | null
+  idJurisdiccion?: number | null
+  tipoProceso?: string
+  fechaAlta?: string
+  fechaNotif?: string | null
+  fechaVencimiento?: string | null
+  cerrado?: boolean
+}): Promise<void> {
+  const sets: string[] = []
+  if (data.caratula             != null) sets.push(`caratula = N'${esc(data.caratula)}'`)
+  if (data.idCliente            != null) sets.push(`id_cliente = ${data.idCliente}`)
+  if (data.idAbogadoResponsable != null) sets.push(`id_abogado_responsable = ${data.idAbogadoResponsable}`)
+  if ('nroInterno'    in data) sets.push(data.nroInterno    ? `nro_interno = N'${esc(data.nroInterno)}'`    : 'nro_interno = NULL')
+  if ('nroExpediente' in data) sets.push(data.nroExpediente ? `nro_expediente = N'${esc(data.nroExpediente)}'` : 'nro_expediente = NULL')
+  if ('idFuero'       in data) sets.push(data.idFuero       != null ? `id_fuero = ${data.idFuero}`             : 'id_fuero = NULL')
+  if ('idJuzgado'     in data) sets.push(data.idJuzgado     != null ? `id_juzgado = ${data.idJuzgado}`         : 'id_juzgado = NULL')
+  if ('idJurisdiccion' in data) sets.push(data.idJurisdiccion != null ? `id_jurisdiccion = ${data.idJurisdiccion}` : 'id_jurisdiccion = NULL')
+  if (data.tipoProceso          != null) sets.push(`tipo_proceso = N'${esc(data.tipoProceso)}'`)
+  if (data.fechaAlta            != null) sets.push(`fecha_alta = '${esc(data.fechaAlta)}'`)
+  if ('fechaNotif'      in data) sets.push(data.fechaNotif      ? `fecha_notificacion = '${esc(data.fechaNotif)}'`          : 'fecha_notificacion = NULL')
+  if ('fechaVencimiento' in data) sets.push(data.fechaVencimiento ? `fecha_proximo_vencimiento = '${esc(data.fechaVencimiento)}'` : 'fecha_proximo_vencimiento = NULL')
+  if (data.cerrado              != null) sets.push(`cerrado = ${data.cerrado ? 1 : 0}`)
+  if (sets.length === 0) return
+  await query(`UPDATE casos SET ${sets.join(', ')} WHERE id_caso = ${id}`)
+}
+
 // ── Crear caso ───────────────────────────────────────────────────────────────
 
 export async function createCaso(data: {

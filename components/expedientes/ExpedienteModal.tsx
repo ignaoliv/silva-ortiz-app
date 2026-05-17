@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown, Eye, Download, Scale, Plus } from 'lucide-react'
+import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown, Eye, Download, Scale, Plus, Pencil } from 'lucide-react'
 import type { DBCaso, DBMovimiento, DBAudiencia, DBHonorario } from '@/lib/queries'
 import { fmtDateLarga, fmtMoney, cn } from '@/lib/utils'
 import { BadgeEstadoCaso } from '@/components/ui/Badge'
@@ -9,6 +9,7 @@ import TabInstrucciones from '@/components/expedientes/TabInstrucciones'
 import TabNegociacion from '@/components/expedientes/TabNegociacion'
 import TabPjn from '@/components/expedientes/TabPjn'
 import NuevoMovimientoModal from '@/components/expedientes/NuevoMovimientoModal'
+import EditarExpedienteModal from '@/components/expedientes/EditarExpedienteModal'
 import GenerarDocumentoModal from '@/components/plantillas/GenerarDocumentoModal'
 
 const TABS = [
@@ -32,6 +33,8 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
   const [loading,      setLoading]      = useState(false)
   const [genDocOpen,   setGenDocOpen]   = useState(false)
   const [newMovOpen,   setNewMovOpen]   = useState(false)
+  const [editOpen,     setEditOpen]     = useState(false)
+  const [casoLocal,    setCasoLocal]    = useState(caso)
 
   useEffect(() => {
     const prev = document.body.style.overflow
@@ -68,19 +71,33 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-      <div className="bg-so-card border border-so-border rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+      onClick={onClose}
+    >
+      <div
+        className="bg-so-card border border-so-border rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4 border-b border-so-border">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-mono text-so-muted tracking-wider">{caso.nro}</span>
-              <BadgeEstadoCaso estado={caso.estado} />
+              <span className="text-[10px] font-mono text-so-muted tracking-wider">{casoLocal.nro}</span>
+              <BadgeEstadoCaso estado={casoLocal.estado} />
             </div>
-            <h2 className="text-sm font-medium text-so-text leading-snug">{caso.caratula}</h2>
-            <p className="text-xs text-so-subtle mt-1">{caso.juzgado}</p>
+            <h2 className="text-sm font-medium text-so-text leading-snug">{casoLocal.caratula}</h2>
+            <p className="text-xs text-so-subtle mt-1">{casoLocal.juzgado}</p>
           </div>
           <div className="flex items-center gap-2 ml-4">
+            <button
+              onClick={() => setEditOpen(true)}
+              title="Editar expediente"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-so-text font-medium border border-so-border bg-so-surface hover:bg-so-card hover:border-so-muted rounded transition-colors"
+            >
+              <Pencil size={12} />
+              Editar
+            </button>
             <button
               onClick={() => setGenDocOpen(true)}
               title="Generar documento"
@@ -115,16 +132,16 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
           {tab === 'detalle' && (
             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
               {([
-                ['Expediente',     caso.exp],
-                ['Fuero',          caso.fuero],
-                ['Jurisdicción',   caso.jurisdiccion],
-                ['Tipo de proceso',caso.tipo],
-                ['Cliente',        caso.clienteNombre],
-                ['Responsable',    caso.responsableNombre],
-                ['Fecha de alta',  fmtDateLarga(caso.fechaAlta)],
-                ['Notificación',   fmtDateLarga(caso.fechaNotif)],
-                ['Vencimiento',    fmtDateLarga(caso.vencimiento)],
-                ['Monto reclamado',caso.monto ? fmtMoney(caso.monto) : '—'],
+                ['Expediente',     casoLocal.exp],
+                ['Fuero',          casoLocal.fuero],
+                ['Jurisdicción',   casoLocal.jurisdiccion],
+                ['Tipo de proceso',casoLocal.tipo],
+                ['Cliente',        casoLocal.clienteNombre],
+                ['Responsable',    casoLocal.responsableNombre],
+                ['Fecha de alta',  fmtDateLarga(casoLocal.fechaAlta)],
+                ['Notificación',   fmtDateLarga(casoLocal.fechaNotif)],
+                ['Vencimiento',    fmtDateLarga(casoLocal.vencimiento)],
+                ['Monto reclamado',casoLocal.monto ? fmtMoney(casoLocal.monto) : '—'],
               ] as [string, string][]).map(([label, value]) => (
                 <div key={label}>
                   <p className="text-[10px] tracking-widest uppercase text-so-muted mb-1">{label}</p>
@@ -277,6 +294,14 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
         casoId={caso.id}
         onClose={() => setNewMovOpen(false)}
         onCreated={fetchMovs}
+      />
+    )}
+
+    {editOpen && (
+      <EditarExpedienteModal
+        caso={casoLocal}
+        onClose={() => setEditOpen(false)}
+        onSaved={updated => setCasoLocal(prev => ({ ...prev, ...updated }))}
       />
     )}
     </>
