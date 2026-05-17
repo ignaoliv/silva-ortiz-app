@@ -51,6 +51,13 @@ export default async function ExpedientesPage({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
           <a
+            href="/base-datos"
+            className="px-3 py-2 text-xs text-so-muted border border-so-border hover:bg-so-surface hover:text-so-text transition-colors rounded"
+            style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+          >
+            Base de datos
+          </a>
+          <a
             href="/ayuda"
             className="px-3 py-2 text-xs text-so-muted border border-so-border hover:bg-so-surface hover:text-so-text transition-colors rounded"
             style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
