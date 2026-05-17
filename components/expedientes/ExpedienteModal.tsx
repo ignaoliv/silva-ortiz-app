@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown, Eye, Download, Scale, Plus, Pencil } from 'lucide-react'
+import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown, Eye, Download, Scale, Plus, Pencil, FlaskConical } from 'lucide-react'
 import type { DBCaso, DBMovimiento, DBAudiencia, DBHonorario } from '@/lib/queries'
 import { fmtDateLarga, fmtMoney, cn } from '@/lib/utils'
 import { BadgeEstadoCaso } from '@/components/ui/Badge'
@@ -10,17 +10,19 @@ import TabNegociacion from '@/components/expedientes/TabNegociacion'
 import TabPjn from '@/components/expedientes/TabPjn'
 import NuevoMovimientoModal from '@/components/expedientes/NuevoMovimientoModal'
 import EditarExpedienteModal from '@/components/expedientes/EditarExpedienteModal'
+import TabPruebas from '@/components/expedientes/TabPruebas'
 import GenerarDocumentoModal from '@/components/plantillas/GenerarDocumentoModal'
 
 const TABS = [
-  { id: 'detalle',       label: 'Detalles',        icon: FileText   },
-  { id: 'movimientos',   label: 'Movimientos',     icon: Clock      },
-  { id: 'pjn',           label: 'PJN',             icon: Scale      },
-  { id: 'audiencias',    label: 'Audiencias',      icon: Calendar   },
-  { id: 'honorarios',    label: 'Honorarios',      icon: DollarSign },
-  { id: 'notas',         label: 'Notas',           icon: StickyNote },
-  { id: 'instrucciones', label: 'Instrucciones',   icon: BookOpen   },
-  { id: 'negociacion',   label: 'Negociación',     icon: Handshake  },
+  { id: 'detalle',       label: 'Detalles',        icon: FileText      },
+  { id: 'movimientos',   label: 'Movimientos',     icon: Clock         },
+  { id: 'pruebas',       label: 'Pruebas',         icon: FlaskConical  },
+  { id: 'pjn',           label: 'PJN',             icon: Scale         },
+  { id: 'audiencias',    label: 'Audiencias',      icon: Calendar      },
+  { id: 'honorarios',    label: 'Honorarios',      icon: DollarSign    },
+  { id: 'notas',         label: 'Notas',           icon: StickyNote    },
+  { id: 'instrucciones', label: 'Instrucciones',   icon: BookOpen      },
+  { id: 'negociacion',   label: 'Negociación',     icon: Handshake     },
 ]
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -214,6 +216,8 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
               }
             </div>
           )}
+
+          {tab === 'pruebas' && <TabPruebas casoId={caso.id} />}
 
           {tab === 'pjn' && <TabPjn casoId={caso.id} />}
 

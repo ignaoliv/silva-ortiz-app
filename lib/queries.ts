@@ -809,6 +809,48 @@ export interface DBFuero { id: number; nombre: string }
 export interface DBJuzgado { id: number; nombre: string }
 export interface DBJurisdiccion { id: number; nombre: string }
 
+export interface DBPrueba {
+  id: number
+  casoId: number
+  tipo: string
+  estado: string
+  parte: string | null
+  fechaPresentacion: string | null
+  fechaVencimiento: string | null
+  observaciones: string | null
+}
+
+export async function getPruebasByCaso(casoId: number): Promise<DBPrueba[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT
+      p.id_prueba,
+      p.id_caso,
+      ISNULL(tp.nombre, 'Sin tipo')    AS tipo,
+      ISNULL(ep.nombre, 'Sin estado')  AS estado,
+      pp.nombre                        AS parte,
+      p.fecha_presentacion,
+      p.fecha_vencimiento,
+      p.observaciones
+    FROM pruebas p
+    LEFT JOIN tipos_prueba   tp ON p.id_tipo_prueba   = tp.id_tipo_prueba
+    LEFT JOIN estados_prueba ep ON p.id_estado_prueba = ep.id_estado_prueba
+    LEFT JOIN partes_prueba  pp ON p.id_parte_prueba  = pp.id_parte_prueba
+    WHERE p.id_caso = ${casoId} AND p.activo = 1
+    ORDER BY p.fecha_presentacion DESC, p.id_prueba
+  `)
+  if (!rows) return []
+  return rows.map(r => ({
+    id:                 r.id_prueba as number,
+    casoId:             r.id_caso as number,
+    tipo:               r.tipo as string,
+    estado:             r.estado as string,
+    parte:              r.parte as string | null,
+    fechaPresentacion:  toDate(r.fecha_presentacion),
+    fechaVencimiento:   toDate(r.fecha_vencimiento),
+    observaciones:      r.observaciones as string | null,
+  }))
+}
+
 export async function getCategorias(): Promise<DBCategoria[]> {
   const rows = await query<Record<string, unknown>>(`
     SELECT id_categoria, nombre FROM categorias_caso
