@@ -4,9 +4,7 @@ import {
   getCategorias, getFueros, getJuzgados, getJurisdicciones,
 } from '@/lib/queries'
 import DBError from '@/components/ui/DBError'
-import KPICards from '@/components/expedientes/KPICards'
-import ExpedientesTable from '@/components/expedientes/ExpedientesTable'
-import AgendaLegal from '@/components/expedientes/AgendaLegal'
+import ExpedientesSection from '@/components/expedientes/ExpedientesSection'
 import NuevoExpedienteButton from '@/components/expedientes/NuevoExpedienteButton'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -64,22 +62,16 @@ export default async function ExpedientesPage() {
         </div>
       </div>
 
-      {/* ── KPI cards ── */}
-      <KPICards
+      {/* ── KPIs + tabla + sidebar ── */}
+      <ExpedientesSection
         kpis={kpis}
         hasPjn={hasPjn}
         enNegociacion={casos.filter(c => /negoci/i.test(c.estado)).length}
+        casos={casos}
+        clientes={clientes}
+        usuarios={usuarios}
+        audiencias={audiencias}
       />
-
-      {/* ── Table + sidebar ── */}
-      <div className="flex gap-4 items-start">
-        <div className="flex-1 min-w-0">
-          <ExpedientesTable casos={casos} clientes={clientes} usuarios={usuarios} />
-        </div>
-        <div className="w-72 flex-shrink-0 hidden lg:block">
-          <AgendaLegal casos={casos} audiencias={audiencias} hasPjn={hasPjn} />
-        </div>
-      </div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import {
   ChevronUp, ChevronDown, Search, Download, ChevronLeft, ChevronRight,
   X, SlidersHorizontal, MoreHorizontal, FileText, Eye
@@ -143,9 +143,15 @@ function Chip({ label, value, onClear }: { label: string; value: string; onClear
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-interface Props { casos: DBCaso[]; clientes: DBCliente[]; usuarios: DBUsuario[] }
+interface Props {
+  casos: DBCaso[]
+  clientes: DBCliente[]
+  usuarios: DBUsuario[]
+  negociacionActive?: boolean
+  onClearNegociacion?: () => void
+}
 
-export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
+export default function ExpedientesTable({ casos, clientes, usuarios, negociacionActive = false, onClearNegociacion }: Props) {
   const fueros       = useMemo(() => Array.from(new Set(casos.map(c => c.fuero))).sort(), [casos])
   const responsables = useMemo(() => Array.from(new Set(casos.map(c => c.responsableNombre))).sort(), [casos])
   const estados      = useMemo(() => Array.from(new Set(casos.map(c => c.estado))).sort(), [casos])
@@ -158,6 +164,9 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
   const [sortDir,     setSortDir]    = useState<SortDir>(-1)
   const [page,        setPage]       = useState(1)
   const [selected,    setSelected]   = useState<DBCaso | null>(null)
+
+  // Sync negociacionActive → resetear página
+  useEffect(() => { setPage(1) }, [negociacionActive])
 
   function toggleSort(col: SortCol) {
     if (col === sortCol) setSortDir(d => d === 1 ? -1 : 1)
@@ -173,11 +182,12 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
 
   const filtered = useMemo(() => {
     let rows = casos
+    if (negociacionActive) rows = rows.filter(c => /negoci/i.test(c.estado))
     if (query)       rows = rows.filter(c =>
       c.caratula.toLowerCase().includes(query.toLowerCase()) ||
       c.nro.toLowerCase().includes(query.toLowerCase())
     )
-    if (estado)      rows = rows.filter(c => c.estado === estado)
+    if (!negociacionActive && estado) rows = rows.filter(c => c.estado === estado)
     if (fuero)       rows = rows.filter(c => c.fuero  === fuero)
     if (responsable) rows = rows.filter(c => c.responsableNombre === responsable)
     return [...rows].sort((a, b) => {
@@ -191,7 +201,7 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
       if (sortCol === 'ultimaActuacion') { va = a.ultimaActuacion ?? '0';     vb = b.ultimaActuacion ?? '0' }
       return va < vb ? -sortDir : va > vb ? sortDir : 0
     })
-  }, [casos, query, estado, fuero, responsable, sortCol, sortDir])
+  }, [casos, query, estado, fuero, responsable, sortCol, sortDir, negociacionActive])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows   = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -251,6 +261,15 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
               )}
             </div>
             <AccionesMenu onExport={() => exportCSV(filtered)} />
+            {negociacionActive && (
+              <button
+                onClick={onClearNegociacion}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-so-text border border-so-border bg-so-surface hover:bg-so-card hover:border-so-muted rounded transition-colors whitespace-nowrap"
+              >
+                <X size={12} />
+                Mostrar todos
+              </button>
+            )}
           </div>
 
           {/* Filter row */}
