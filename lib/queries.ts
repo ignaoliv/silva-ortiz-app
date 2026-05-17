@@ -22,6 +22,7 @@ export interface DBCaso {
   vencimiento: string | null
   monto: number
   cerrado: boolean
+  ultimaActuacion: string | null
 }
 
 export interface DBCliente {
@@ -110,7 +111,13 @@ export async function getCasos(): Promise<DBCaso[]> {
       c.fecha_notificacion,
       c.fecha_proximo_vencimiento,
       c.cerrado,
-      ISNULL(vd.suma_reclamado, 0)          AS monto
+      ISNULL(vd.suma_reclamado, 0)          AS monto,
+      (
+        SELECT MAX(m.fecha_movimiento)
+        FROM movimientos m
+        WHERE m.id_caso = c.id_caso
+          AND m.fecha_movimiento < '2027-01-01'
+      ) AS fecha_ultima_actuacion
     FROM casos c
     LEFT JOIN clientes cl          ON c.id_cliente             = cl.id_cliente
     LEFT JOIN usuarios_estudio u   ON c.id_abogado_responsable = u.id_usuario
@@ -120,7 +127,7 @@ export async function getCasos(): Promise<DBCaso[]> {
     LEFT JOIN estados_procesales ep ON c.id_estado_actual      = ep.id_estado
     LEFT JOIN vw_casos_dashboard vd ON c.id_caso              = vd.id_caso
     WHERE c.activo = 1
-    ORDER BY c.fecha_proximo_vencimiento ASC, c.id_caso ASC
+    ORDER BY fecha_ultima_actuacion DESC, c.id_caso ASC
   `)
   if (!rows) return []
   return rows.map(r => ({
@@ -143,6 +150,7 @@ export async function getCasos(): Promise<DBCaso[]> {
     vencimiento:       toDate(r.fecha_proximo_vencimiento),
     monto:             Number(r.monto) || 0,
     cerrado:           Boolean(r.cerrado),
+    ultimaActuacion:   toDate(r.fecha_ultima_actuacion),
   }))
 }
 

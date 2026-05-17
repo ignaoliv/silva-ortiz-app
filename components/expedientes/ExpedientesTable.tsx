@@ -10,7 +10,7 @@ import { BadgeEstadoCaso } from '@/components/ui/Badge'
 import ExpedienteModal from './ExpedienteModal'
 
 const PAGE_SIZE = 10
-type SortCol = 'nro' | 'caratula' | 'cliente' | 'estado' | 'responsable' | 'vencimiento'
+type SortCol = 'nro' | 'caratula' | 'cliente' | 'estado' | 'responsable' | 'vencimiento' | 'ultimaActuacion'
 type SortDir = 1 | -1
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -148,14 +148,13 @@ interface Props { casos: DBCaso[]; clientes: DBCliente[]; usuarios: DBUsuario[] 
 export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
   const fueros       = useMemo(() => Array.from(new Set(casos.map(c => c.fuero))).sort(), [casos])
   const responsables = useMemo(() => Array.from(new Set(casos.map(c => c.responsableNombre))).sort(), [casos])
-  const estados      = useMemo(() => Array.from(new Set(casos.map(c => c.estado))).sort(), [casos])
 
   const [query,       setQuery]      = useState('')
-  const [estado,      setEstado]     = useState('')
+  const [cerrado,     setCerrado]    = useState('')   // '' | 'activo' | 'cerrado'
   const [fuero,       setFuero]      = useState('')
   const [responsable, setResponsable] = useState('')
-  const [sortCol,     setSortCol]    = useState<SortCol>('vencimiento')
-  const [sortDir,     setSortDir]    = useState<SortDir>(1)
+  const [sortCol,     setSortCol]    = useState<SortCol>('ultimaActuacion')
+  const [sortDir,     setSortDir]    = useState<SortDir>(-1)
   const [page,        setPage]       = useState(1)
   const [selected,    setSelected]   = useState<DBCaso | null>(null)
 
@@ -166,10 +165,10 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
   }
 
   function clearAll() {
-    setQuery(''); setEstado(''); setFuero(''); setResponsable(''); setPage(1)
+    setQuery(''); setCerrado(''); setFuero(''); setResponsable(''); setPage(1)
   }
 
-  const hasFilters = !!query || !!estado || !!fuero || !!responsable
+  const hasFilters = !!query || !!cerrado || !!fuero || !!responsable
 
   const filtered = useMemo(() => {
     let rows = casos
@@ -177,20 +176,22 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
       c.caratula.toLowerCase().includes(query.toLowerCase()) ||
       c.nro.toLowerCase().includes(query.toLowerCase())
     )
-    if (estado)      rows = rows.filter(c => c.estado === estado)
+    if (cerrado === 'activo')   rows = rows.filter(c => !c.cerrado)
+    if (cerrado === 'cerrado')  rows = rows.filter(c =>  c.cerrado)
     if (fuero)       rows = rows.filter(c => c.fuero  === fuero)
     if (responsable) rows = rows.filter(c => c.responsableNombre === responsable)
     return [...rows].sort((a, b) => {
       let va = '', vb = ''
-      if (sortCol === 'nro')         { va = a.nro;               vb = b.nro }
-      if (sortCol === 'caratula')    { va = a.caratula;           vb = b.caratula }
-      if (sortCol === 'cliente')     { va = a.clienteNombre;      vb = b.clienteNombre }
-      if (sortCol === 'estado')      { va = a.estado;             vb = b.estado }
-      if (sortCol === 'responsable') { va = a.responsableNombre;  vb = b.responsableNombre }
-      if (sortCol === 'vencimiento') { va = a.vencimiento ?? 'z'; vb = b.vencimiento ?? 'z' }
+      if (sortCol === 'nro')             { va = a.nro;                        vb = b.nro }
+      if (sortCol === 'caratula')        { va = a.caratula;                   vb = b.caratula }
+      if (sortCol === 'cliente')         { va = a.clienteNombre;              vb = b.clienteNombre }
+      if (sortCol === 'estado')          { va = a.estado;                     vb = b.estado }
+      if (sortCol === 'responsable')     { va = a.responsableNombre;          vb = b.responsableNombre }
+      if (sortCol === 'vencimiento')     { va = a.vencimiento ?? 'z';         vb = b.vencimiento ?? 'z' }
+      if (sortCol === 'ultimaActuacion') { va = a.ultimaActuacion ?? '0';     vb = b.ultimaActuacion ?? '0' }
       return va < vb ? -sortDir : va > vb ? sortDir : 0
     })
-  }, [casos, query, estado, fuero, responsable, sortCol, sortDir])
+  }, [casos, query, cerrado, fuero, responsable, sortCol, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows   = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -254,9 +255,10 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
 
           {/* Filter row */}
           <div className="flex flex-wrap items-center gap-2 mt-3">
-            <select value={estado} onChange={e => { setEstado(e.target.value); setPage(1) }} className={selectCls}>
+            <select value={cerrado} onChange={e => { setCerrado(e.target.value); setPage(1) }} className={selectCls}>
               <option value="">Estado</option>
-              {estados.map(e => <option key={e}>{e}</option>)}
+              <option value="activo">Activos</option>
+              <option value="cerrado">Cerrados</option>
             </select>
             <select value={fuero} onChange={e => { setFuero(e.target.value); setPage(1) }} className={selectCls}>
               <option value="">Fuero</option>
@@ -268,7 +270,7 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
             </select>
 
             {/* Active chips */}
-            {estado      && <Chip label="Estado"      value={estado}      onClear={() => { setEstado('');      setPage(1) }} />}
+            {cerrado     && <Chip label="Estado"      value={cerrado === 'activo' ? 'Activos' : 'Cerrados'} onClear={() => { setCerrado('');     setPage(1) }} />}
             {fuero        && <Chip label="Fuero"       value={fuero}       onClear={() => { setFuero('');       setPage(1) }} />}
             {responsable  && <Chip label="Responsable" value={responsable} onClear={() => { setResponsable(''); setPage(1) }} />}
 
@@ -288,12 +290,13 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
           <table className="w-full min-w-[720px]">
             <thead className="border-b border-so-border bg-so-surface/60 sticky top-0 z-10">
               <tr>
-                <ThSort col="nro"         label="N° Exp." />
-                <ThSort col="caratula"    label="Carátula" cls="max-w-xs" />
-                <ThSort col="cliente"     label="Cliente" />
-                <ThSort col="estado"      label="Estado" />
-                <ThSort col="responsable" label="Responsable" />
-                <ThSort col="vencimiento" label="Vencimiento" />
+                <ThSort col="nro"             label="N° Exp." />
+                <ThSort col="caratula"        label="Carátula" cls="max-w-xs" />
+                <ThSort col="cliente"         label="Cliente" />
+                <ThSort col="estado"          label="Estado" />
+                <ThSort col="responsable"     label="Responsable" />
+                <ThSort col="ultimaActuacion" label="Últ. actuación" />
+                <ThSort col="vencimiento"     label="Vencimiento" />
                 <th className="px-3 py-3 text-right text-[10px] font-medium tracking-widest uppercase text-so-muted whitespace-nowrap">Monto</th>
                 <th className="px-3 py-3 w-8" />
               </tr>
@@ -348,6 +351,9 @@ export default function ExpedientesTable({ casos, clientes, usuarios }: Props) {
                       </span>
                       <span className="text-xs text-so-textMid">{caso.responsableNombre.split(' ')[0]}</span>
                     </div>
+                  </td>
+                  <td className="px-3 py-4 text-xs text-so-textMid tabular-nums">
+                    {caso.ultimaActuacion ? fmtDate(caso.ultimaActuacion) : <span className="text-so-muted">—</span>}
                   </td>
                   <td className="px-3 py-4 text-xs">
                     <VencimientoCell iso={caso.vencimiento} />
