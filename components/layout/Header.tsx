@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import type { Session } from 'next-auth'
-import { LogOut, User, Sun, Moon } from 'lucide-react'
+import { LogOut, User, Sun, Moon, HelpCircle } from 'lucide-react'
 import { initials } from '@/lib/utils'
 import { useState, useRef, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -72,6 +72,15 @@ export default function Header({ user }: { user: Session['user'] }) {
 
         {/* PJN Status */}
         <PjnStatusIndicator />
+
+        {/* Ayuda */}
+        <Link
+          href="/ayuda"
+          title="Ayuda"
+          className={`p-1.5 rounded text-so-muted hover:text-so-text hover:bg-so-surface transition-colors ${path.startsWith('/ayuda') ? 'text-so-text' : ''}`}
+        >
+          <HelpCircle size={14} />
+        </Link>
 
         {/* Theme toggle */}
         {mounted && (

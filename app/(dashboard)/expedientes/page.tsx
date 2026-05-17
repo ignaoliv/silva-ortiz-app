@@ -52,17 +52,11 @@ export default async function ExpedientesPage({
         <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
           <a
             href="/base-datos"
-            className="px-3 py-2 text-xs text-so-muted border border-so-border hover:bg-so-surface hover:text-so-text transition-colors rounded"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-so-muted border border-so-border hover:bg-so-surface hover:text-so-text transition-colors rounded"
             style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
           >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
             Base de datos
-          </a>
-          <a
-            href="/ayuda"
-            className="px-3 py-2 text-xs text-so-muted border border-so-border hover:bg-so-surface hover:text-so-text transition-colors rounded"
-            style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-          >
-            Ayuda
           </a>
           <NuevoExpedienteButton
             clientes={clientes}
