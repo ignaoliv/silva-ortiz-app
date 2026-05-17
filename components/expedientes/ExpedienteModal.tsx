@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown, Eye, Download, Scale } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown, Eye, Download, Scale, Plus } from 'lucide-react'
 import type { DBCaso, DBMovimiento, DBAudiencia, DBHonorario } from '@/lib/queries'
 import { fmtDateLarga, fmtMoney, cn } from '@/lib/utils'
 import { BadgeEstadoCaso } from '@/components/ui/Badge'
@@ -8,6 +8,7 @@ import TabNotas from '@/components/expedientes/TabNotas'
 import TabInstrucciones from '@/components/expedientes/TabInstrucciones'
 import TabNegociacion from '@/components/expedientes/TabNegociacion'
 import TabPjn from '@/components/expedientes/TabPjn'
+import NuevoMovimientoModal from '@/components/expedientes/NuevoMovimientoModal'
 import GenerarDocumentoModal from '@/components/plantillas/GenerarDocumentoModal'
 
 const TABS = [
@@ -30,12 +31,18 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
   const [hons,         setHons]         = useState<DBHonorario[]>([])
   const [loading,      setLoading]      = useState(false)
   const [genDocOpen,   setGenDocOpen]   = useState(false)
+  const [newMovOpen,   setNewMovOpen]   = useState(false)
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', esc)
     return () => document.removeEventListener('keydown', esc)
   }, [onClose])
+
+  const fetchMovs = useCallback(async () => {
+    const m = await fetch(`/api/casos/${caso.id}/movimientos`).then(r => r.json())
+    setMovs(m)
+  }, [caso.id])
 
   useEffect(() => {
     async function fetchData() {
@@ -122,7 +129,18 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
           )}
 
           {tab === 'movimientos' && (
-            loading
+            <div>
+              <div className="flex justify-end mb-4">
+                <button
+                  type="button"
+                  onClick={() => setNewMovOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-so-text font-medium border border-so-border bg-so-surface hover:bg-so-card hover:border-so-muted rounded transition-colors"
+                >
+                  <Plus size={12} />
+                  Nuevo movimiento
+                </button>
+              </div>
+              {loading
               ? <p className="text-so-muted text-xs text-center py-8">Cargando...</p>
               : movs.length === 0
               ? <p className="text-so-muted text-xs text-center py-8">Sin movimientos registrados</p>
@@ -170,6 +188,8 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
                     </li>
                   ))}
                 </ol>
+              }
+            </div>
           )}
 
           {tab === 'pjn' && <TabPjn casoId={caso.id} />}
@@ -243,6 +263,14 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
         casoId={caso.id}
         caratula={caso.caratula}
         onClose={() => setGenDocOpen(false)}
+      />
+    )}
+
+    {newMovOpen && (
+      <NuevoMovimientoModal
+        casoId={caso.id}
+        onClose={() => setNewMovOpen(false)}
+        onCreated={fetchMovs}
       />
     )}
     </>

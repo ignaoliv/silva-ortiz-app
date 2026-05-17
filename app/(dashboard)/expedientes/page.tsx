@@ -1,9 +1,13 @@
 import { checkDB } from '@/lib/db'
-import { getCasos, getClientes, getUsuarios, getKPIs, getAudiencias, hasPjnCredentials } from '@/lib/queries'
+import {
+  getCasos, getClientes, getUsuarios, getKPIs, getAudiencias, hasPjnCredentials,
+  getCategorias, getFueros, getJuzgados, getJurisdicciones,
+} from '@/lib/queries'
 import DBError from '@/components/ui/DBError'
 import KPICards from '@/components/expedientes/KPICards'
 import ExpedientesTable from '@/components/expedientes/ExpedientesTable'
 import AgendaLegal from '@/components/expedientes/AgendaLegal'
+import NuevoExpedienteButton from '@/components/expedientes/NuevoExpedienteButton'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
@@ -16,13 +20,17 @@ export default async function ExpedientesPage() {
   const session = await getServerSession(authOptions)
   const email = session?.user?.email ?? ''
 
-  const [casos, clientes, usuarios, kpis, audiencias, hasPjn] = await Promise.all([
+  const [casos, clientes, usuarios, kpis, audiencias, hasPjn, categorias, fueros, juzgados, jurisdicciones] = await Promise.all([
     getCasos(),
     getClientes(),
     getUsuarios(),
     getKPIs(),
     getAudiencias(),
     hasPjnCredentials(email),
+    getCategorias(),
+    getFueros(),
+    getJuzgados(),
+    getJurisdicciones(),
   ])
 
   return (
@@ -45,13 +53,14 @@ export default async function ExpedientesPage() {
           >
             Ayuda
           </a>
-          <a
-            href="/expedientes/nuevo"
-            className="px-4 py-2 text-xs font-semibold bg-so-red hover:opacity-80 text-white transition-opacity rounded"
-            style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-          >
-            + Nuevo expediente
-          </a>
+          <NuevoExpedienteButton
+            clientes={clientes}
+            usuarios={usuarios}
+            categorias={categorias}
+            fueros={fueros}
+            juzgados={juzgados}
+            jurisdicciones={jurisdicciones}
+          />
         </div>
       </div>
 

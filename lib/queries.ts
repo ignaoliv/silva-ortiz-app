@@ -802,6 +802,136 @@ export interface PjnUserStatus {
   actuacionesNew:   number
 }
 
+// ── Catálogos (categorías, fueros, juzgados, jurisdicciones) ─────────────────
+
+export interface DBCategoria { id: number; nombre: string }
+export interface DBFuero { id: number; nombre: string }
+export interface DBJuzgado { id: number; nombre: string }
+export interface DBJurisdiccion { id: number; nombre: string }
+
+export async function getCategorias(): Promise<DBCategoria[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id_categoria, nombre FROM categorias_caso
+    ORDER BY nombre
+  `)
+  if (!rows) return []
+  return rows.map(r => ({ id: r.id_categoria as number, nombre: r.nombre as string }))
+}
+
+export async function getFueros(): Promise<DBFuero[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id_fuero, nombre FROM fueros
+    ORDER BY nombre
+  `)
+  if (!rows) return []
+  return rows.map(r => ({ id: r.id_fuero as number, nombre: r.nombre as string }))
+}
+
+export async function getJuzgados(): Promise<DBJuzgado[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id_juzgado, nombre FROM juzgados
+    ORDER BY nombre
+  `)
+  if (!rows) return []
+  return rows.map(r => ({ id: r.id_juzgado as number, nombre: r.nombre as string }))
+}
+
+export async function getJurisdicciones(): Promise<DBJurisdiccion[]> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT id_jurisdiccion, nombre FROM jurisdicciones
+    ORDER BY nombre
+  `)
+  if (!rows) return []
+  return rows.map(r => ({ id: r.id_jurisdiccion as number, nombre: r.nombre as string }))
+}
+
+// ── Crear caso ───────────────────────────────────────────────────────────────
+
+export async function createCaso(data: {
+  caratula: string
+  idCategoria: number
+  idCliente: number
+  idAbogadoResponsable: number
+  nroInterno?: string
+  nroExpediente?: string
+  idFuero?: number
+  idJuzgado?: number
+  idJurisdiccion?: number
+  tipoProceso?: string
+  fechaAlta: string  // YYYY-MM-DD
+  fechaVencimiento?: string
+  usuarioCreacion: string
+}): Promise<number> {
+  const caratula      = esc(data.caratula)
+  const usuarioCreac  = esc(data.usuarioCreacion)
+  const nroInterno    = data.nroInterno    ? `N'${esc(data.nroInterno)}'`    : 'NULL'
+  const nroExpediente = data.nroExpediente ? `N'${esc(data.nroExpediente)}'` : 'NULL'
+  const tipoProceso   = esc(data.tipoProceso ?? 'Judicial')
+  const idFuero       = data.idFuero        != null ? String(data.idFuero)        : 'NULL'
+  const idJuzgado     = data.idJuzgado      != null ? String(data.idJuzgado)      : 'NULL'
+  const idJurisdic    = data.idJurisdiccion != null ? String(data.idJurisdiccion) : 'NULL'
+  const fechaVenc     = data.fechaVencimiento ? `'${esc(data.fechaVencimiento)}'` : 'NULL'
+
+  const rows = await query<Record<string, unknown>>(`
+    INSERT INTO casos (
+      caratula, id_categoria, id_cliente, id_abogado_responsable,
+      nro_interno, nro_expediente,
+      id_fuero, id_juzgado, id_jurisdiccion,
+      tipo_proceso, fecha_alta, fecha_proximo_vencimiento,
+      activo, cerrado, fecha_creacion, usuario_creacion
+    )
+    OUTPUT INSERTED.id_caso
+    VALUES (
+      N'${caratula}', ${data.idCategoria}, ${data.idCliente}, ${data.idAbogadoResponsable},
+      ${nroInterno}, ${nroExpediente},
+      ${idFuero}, ${idJuzgado}, ${idJurisdic},
+      N'${tipoProceso}', '${esc(data.fechaAlta)}', ${fechaVenc},
+      1, 0, GETDATE(), '${usuarioCreac}'
+    )
+  `)
+  return rows?.[0]?.id_caso as number
+}
+
+// ── Crear movimiento ─────────────────────────────────────────────────────────
+
+export async function createMovimiento(data: {
+  casoId: number
+  tipo: string
+  titulo: string
+  descripcion: string
+  fecha: string  // YYYY-MM-DD
+  urlDocumento?: string | null
+  idUsuarioRegistro?: number | null
+}): Promise<number> {
+  const tipo        = esc(data.tipo)
+  const titulo      = esc(data.titulo)
+  const descripcion = esc(data.descripcion)
+  const urlDoc      = data.urlDocumento ? `N'${esc(data.urlDocumento)}'` : 'NULL'
+  const idUsuario   = data.idUsuarioRegistro != null ? String(data.idUsuarioRegistro) : 'NULL'
+
+  const rows = await query<Record<string, unknown>>(`
+    INSERT INTO movimientos (
+      id_caso, fecha_movimiento, tipo_movimiento, titulo, descripcion,
+      url_documento, id_usuario_registro, fecha_carga
+    )
+    OUTPUT INSERTED.id_movimiento
+    VALUES (
+      ${data.casoId}, '${esc(data.fecha)}', N'${tipo}', N'${titulo}', N'${descripcion}',
+      ${urlDoc}, ${idUsuario}, GETDATE()
+    )
+  `)
+  return rows?.[0]?.id_movimiento as number
+}
+
+export async function getUsuarioIdByEmail(email: string): Promise<number | null> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT TOP 1 id_usuario FROM usuarios_estudio
+    WHERE email = '${esc(email)}' AND activo = 1
+  `)
+  const r = rows?.[0]
+  return r ? (r.id_usuario as number) : null
+}
+
 export async function getPjnUserStatus(email: string): Promise<PjnUserStatus> {
   const conectado = await hasPjnCredentials(email)
 
