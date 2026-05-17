@@ -56,6 +56,7 @@ export interface DBMovimiento {
   titulo: string
   descripcion: string
   usuario: string
+  urlDocumento: string | null
 }
 
 export interface DBUsuario {
@@ -229,7 +230,8 @@ export async function getMovimientosByCaso(casoId: number): Promise<DBMovimiento
       ISNULL(m.tipo_movimiento, '—')  AS tipo_movimiento,
       ISNULL(m.titulo, '—')           AS titulo,
       ISNULL(m.descripcion, '')       AS descripcion,
-      ISNULL(u.nombre_completo, '—') AS usuario
+      ISNULL(u.nombre_completo, '—') AS usuario,
+      m.url_documento                 AS url_documento
     FROM movimientos m
     LEFT JOIN usuarios_estudio u ON m.id_usuario_registro = u.id_usuario
     WHERE m.id_caso = ${casoId}
@@ -240,10 +242,11 @@ export async function getMovimientosByCaso(casoId: number): Promise<DBMovimiento
     id:          r.id_movimiento as number,
     casoId:      r.id_caso as number,
     fecha:       toDate(r.fecha_movimiento) ?? '',
-    tipo:        r.tipo_movimiento as string,
-    titulo:      r.titulo as string,
-    descripcion: r.descripcion as string,
-    usuario:     r.usuario as string,
+    tipo:         r.tipo_movimiento as string,
+    titulo:       r.titulo as string,
+    descripcion:  r.descripcion as string,
+    usuario:      r.usuario as string,
+    urlDocumento: r.url_documento as string | null,
   }))
 }
 
@@ -510,6 +513,30 @@ export interface DBPjnActuacion {
   urlBlob:       string | null
   textoExtraido: string | null
   resumenIa:     string | null
+}
+
+/** Devuelve el pjn_expediente vinculado a un caso (si existe). */
+export async function getPjnExpedienteByCaso(casoId: number): Promise<DBPjnExpediente | null> {
+  const rows = await query<Record<string, unknown>>(`
+    SELECT TOP 1 id, nro_expediente, caratula, dependencia, situacion,
+           ultima_act, id_caso, fecha_sync, resumen_ia
+    FROM pjn_expedientes
+    WHERE id_caso = ${casoId}
+    ORDER BY fecha_sync DESC
+  `)
+  if (!rows || rows.length === 0) return null
+  const r = rows[0]
+  return {
+    id:          r.id as number,
+    nro:         r.nro_expediente as string,
+    caratula:    r.caratula as string,
+    dependencia: r.dependencia as string,
+    situacion:   r.situacion as string,
+    ultimaAct:   r.ultima_act ? String(r.ultima_act).split('T')[0] : null,
+    idCaso:      r.id_caso as number | null,
+    fechaSync:   String(r.fecha_sync).split('T')[0],
+    resumenIa:   r.resumen_ia as string | null,
+  }
 }
 
 export async function getPjnExpedientes(email: string): Promise<DBPjnExpediente[]> {

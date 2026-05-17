@@ -1,17 +1,19 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown } from 'lucide-react'
+import { X, FileText, Clock, Calendar, DollarSign, StickyNote, BookOpen, Handshake, FileDown, Eye, Download, Scale } from 'lucide-react'
 import type { DBCaso, DBMovimiento, DBAudiencia, DBHonorario } from '@/lib/queries'
 import { fmtDateLarga, fmtMoney, cn } from '@/lib/utils'
 import { BadgeEstadoCaso } from '@/components/ui/Badge'
 import TabNotas from '@/components/expedientes/TabNotas'
 import TabInstrucciones from '@/components/expedientes/TabInstrucciones'
 import TabNegociacion from '@/components/expedientes/TabNegociacion'
+import TabPjn from '@/components/expedientes/TabPjn'
 import GenerarDocumentoModal from '@/components/plantillas/GenerarDocumentoModal'
 
 const TABS = [
   { id: 'detalle',       label: 'Detalles',        icon: FileText   },
   { id: 'movimientos',   label: 'Movimientos',     icon: Clock      },
+  { id: 'pjn',           label: 'PJN',             icon: Scale      },
   { id: 'audiencias',    label: 'Audiencias',      icon: Calendar   },
   { id: 'honorarios',    label: 'Honorarios',      icon: DollarSign },
   { id: 'notas',         label: 'Notas',           icon: StickyNote },
@@ -69,9 +71,9 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
             <button
               onClick={() => setGenDocOpen(true)}
               title="Generar documento"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-so-muted border border-so-border hover:bg-so-surface hover:text-so-text rounded transition-colors"
+              className="btn-gen-doc flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-so-text font-semibold rounded transition-all hover:scale-105"
             >
-              <FileDown size={13} />
+              <FileDown size={13} className="text-[#D4A847]" />
               Generar doc
             </button>
             <button onClick={onClose} className="text-so-muted hover:text-so-text transition-colors">
@@ -131,17 +133,46 @@ export default function ExpedienteModal({ caso, onClose }: { caso: DBCaso; onClo
                       <div className="flex items-baseline gap-2 mb-0.5">
                         <span className="text-xs font-medium text-so-text">{m.titulo}</span>
                         <span className="text-[10px] text-so-muted">{m.tipo}</span>
+                        {m.urlDocumento && (
+                          <span className="flex items-center gap-1 ml-auto">
+                            <a
+                              href={m.urlDocumento}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Ver documento"
+                              className="text-so-muted hover:text-so-ash transition-colors"
+                            >
+                              <Eye size={12} />
+                            </a>
+                            <a
+                              href={m.urlDocumento}
+                              download
+                              title="Descargar documento"
+                              className="text-so-muted hover:text-so-ash transition-colors"
+                            >
+                              <Download size={12} />
+                            </a>
+                          </span>
+                        )}
                       </div>
                       {m.descripcion && <p className="text-xs text-so-subtle leading-relaxed">{m.descripcion}</p>}
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] text-so-muted">{m.usuario}</span>
                         <span className="text-so-border">·</span>
                         <span className="text-[10px] text-so-muted">{fmtDateLarga(m.fecha)}</span>
+                        {m.urlDocumento && (
+                          <>
+                            <span className="text-so-border">·</span>
+                            <span className="text-[10px] text-[#D4A847] tracking-wide">📎 doc adjunto</span>
+                          </>
+                        )}
                       </div>
                     </li>
                   ))}
                 </ol>
           )}
+
+          {tab === 'pjn' && <TabPjn casoId={caso.id} />}
 
           {tab === 'audiencias' && (
             auds.length === 0

@@ -99,3 +99,38 @@
     @apply border-t border-so-border;
   }
 }
+
+/* ── Botón con borde gradiente animado (estilo PJN/escudo) ───── */
+@keyframes spin-border {
+  0%   { --angle: 0deg; }
+  100% { --angle: 360deg; }
+}
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.btn-gen-doc {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--so-card, #1a1a1a), var(--so-card, #1a1a1a)) padding-box,
+    conic-gradient(from var(--angle), #82181a, #d4a847, #82181a, #d4a847, #82181a) border-box;
+  animation: spin-border 4s linear infinite;
+}
+.btn-gen-doc::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--angle), #82181a, #d4a847, #82181a);
+  filter: blur(8px);
+  opacity: 0.4;
+  z-index: -1;
+  animation: spin-border 4s linear infinite;
+}
+.btn-gen-doc:hover::before {
+  opacity: 0.7;
+}
