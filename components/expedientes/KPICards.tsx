@@ -1,4 +1,4 @@
-import { AlertTriangle, Calendar, Zap, CheckCircle, ChevronRight } from 'lucide-react'
+import { AlertTriangle, Calendar, Zap, CheckCircle, ChevronRight, Handshake } from 'lucide-react'
 
 interface KPIs {
   total: number
@@ -10,11 +10,12 @@ interface KPIs {
 interface Props {
   kpis: KPIs
   hasPjn: boolean
+  enNegociacion: number
 }
 
-export default function KPICards({ kpis, hasPjn }: Props) {
+export default function KPICards({ kpis, hasPjn, enNegociacion }: Props) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
 
       {/* Vencimientos próximos */}
       <div className="card px-5 py-4 border-t-2 border-t-amber-600">
@@ -83,6 +84,20 @@ export default function KPICards({ kpis, hasPjn }: Props) {
         </div>
         <p className="text-3xl font-light text-so-text tabular-nums">{kpis.activos.toLocaleString('es-AR')}</p>
         <p className="text-[10px] text-so-muted mt-1">de {kpis.total.toLocaleString('es-AR')} totales</p>
+      </div>
+
+      {/* En negociación */}
+      <div className="card px-5 py-4 border-t-2 border-t-purple-600">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-[10px] text-so-muted tracking-widest uppercase leading-snug">
+            En<br />negociación
+          </p>
+          <div className="w-7 h-7 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+            <Handshake size={13} className="text-purple-400" />
+          </div>
+        </div>
+        <p className="text-3xl font-light text-so-text tabular-nums">{enNegociacion}</p>
+        <p className="text-[10px] text-so-muted mt-1">casos en proceso de acuerdo</p>
       </div>
 
     </div>

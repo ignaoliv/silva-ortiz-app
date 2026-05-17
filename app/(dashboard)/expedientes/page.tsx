@@ -65,7 +65,11 @@ export default async function ExpedientesPage() {
       </div>
 
       {/* ── KPI cards ── */}
-      <KPICards kpis={kpis} hasPjn={hasPjn} />
+      <KPICards
+        kpis={kpis}
+        hasPjn={hasPjn}
+        enNegociacion={casos.filter(c => /negoci/i.test(c.estado)).length}
+      />
 
       {/* ── Table + sidebar ── */}
       <div className="flex gap-4 items-start">
